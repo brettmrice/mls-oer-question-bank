@@ -1,0 +1,74 @@
+name: Validate Community Pre-Built Quiz Submission
+
+on:
+  issues:
+    types: [opened, edited, labeled]
+
+permissions:
+  issues: write
+  contents: read
+
+jobs:
+  validate-prebuilt-submission:
+    if: contains(github.event.issue.labels.*.name, 'prebuilt-quiz')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install PyArrow
+        run: pip install pyarrow
+
+      - name: Download Parquet Shard Index & Validate Submission
+        id: validate
+        env:
+          DATA_BASE_URL: ${{ vars.VITE_DATA_BASE_URL || 'https://mls-oer-question-bank.github.io/mls-oer-data' }}
+          ISSUE_BODY: ${{ github.event.issue.body }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+        run: |
+          mkdir -p /tmp/data/topics
+          if [ -f "local_data/manifest.json" ]; then
+            cp -r local_data/* /tmp/data/
+          else
+            curl -fsSL "$DATA_BASE_URL/manifest.json" -o /tmp/data/manifest.json
+            python -c '
+          import json, pathlib, urllib.request, os
+          base = os.environ["DATA_BASE_URL"].rstrip("/")
+          manifest = json.loads(pathlib.Path("/tmp/data/manifest.json").read_text())
+          for shard in manifest["shards"]:
+              rel = shard["parquet"]["path"]
+              dest = pathlib.Path("/tmp/data") / rel
+              dest.parent.mkdir(parents=True, exist_ok=True)
+              urllib.request.urlretrieve(f"{base}/{rel}", dest)
+          '
+          fi
+          set +e
+          python -m pipeline.validate_prebuilt \
+            --data-dir /tmp/data \
+            --issue-body-env ISSUE_BODY \
+            --quiz-id "community_issue_${ISSUE_NUMBER}" \
+            --report-md /tmp/prebuilt_report.md
+          echo "exit_code=$?" >> "$GITHUB_OUTPUT"
+          set -e
+
+      - name: Comment Validation Result on Issue
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const report = fs.readFileSync('/tmp/prebuilt_report.md', 'utf8');
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: report,
+            });
+
+      - name: Enforce validation result status
+        if: steps.validate.outputs.exit_code != '0'
+        run: exit 1

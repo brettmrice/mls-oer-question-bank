@@ -1,0 +1,23 @@
+# Python & Virtual Environment
+pipeline/.venv/
+.venv/
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+*.egg-info/
+dist/
+build/
+
+# Local ETL Output
+local_data/
+
+# Node & Frontend
+node_modules/
+.env
+.env.local
+.env.*.local
+
+# OS & Editor
+.DS_Store
+Thumbs.db

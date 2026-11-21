@@ -1,0 +1,163 @@
+import React, { useEffect } from 'react';
+import { X } from 'lucide-react';
+import { cn } from '@/lib/utils';
+
+export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
+  variant?: 'primary' | 'secondary' | 'outline' | 'ghost';
+  size?: 'sm' | 'md' | 'icon';
+}
+
+export function Button({
+  className,
+  variant = 'secondary',
+  size = 'md',
+  type = 'button',
+  ...props
+}: ButtonProps): React.ReactElement {
+  const variants: Record<NonNullable<ButtonProps['variant']>, string> = {
+    primary:
+      'bg-indigo-600 text-white hover:bg-indigo-700 border border-indigo-600 shadow-xs disabled:opacity-50',
+    secondary:
+      'bg-slate-100 text-slate-800 hover:bg-slate-200 border border-slate-200 disabled:opacity-50',
+    outline:
+      'bg-white text-slate-700 hover:bg-slate-50 border border-slate-300 shadow-2xs disabled:opacity-50',
+    ghost: 'bg-transparent text-slate-600 hover:bg-slate-100 hover:text-slate-900 border border-transparent disabled:opacity-50',
+  };
+  const sizes: Record<NonNullable<ButtonProps['size']>, string> = {
+    sm: 'h-8 px-2.5 text-xs rounded-md',
+    md: 'h-9 px-3.5 text-sm rounded-lg',
+    icon: 'h-8 w-8 rounded-md p-0',
+  };
+  return (
+    <button
+      type={type}
+      className={cn(
+        'inline-flex items-center justify-center gap-1.5 font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 cursor-pointer disabled:cursor-not-allowed',
+        variants[variant],
+        sizes[size],
+        className,
+      )}
+      {...props}
+    />
+  );
+}
+
+export interface BadgeProps extends React.HTMLAttributes<HTMLSpanElement> {
+  variant?: 'default' | 'outline' | 'accent';
+}
+
+export function Badge({
+  className,
+  variant = 'default',
+  ...props
+}: BadgeProps): React.ReactElement {
+  const variants: Record<NonNullable<BadgeProps['variant']>, string> = {
+    default: 'bg-slate-100 text-slate-700 border border-slate-200',
+    outline: 'bg-white text-slate-600 border border-slate-300',
+    accent: 'bg-indigo-50 text-indigo-700 border border-indigo-200',
+  };
+  return (
+    <span
+      className={cn(
+        'inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-xs font-medium leading-tight',
+        variants[variant],
+        className,
+      )}
+      {...props}
+    />
+  );
+}
+
+export function Card({
+  className,
+  ...props
+}: React.HTMLAttributes<HTMLDivElement>): React.ReactElement {
+  return (
+    <div
+      className={cn(
+        'rounded-xl border border-slate-200 bg-white shadow-2xs',
+        className,
+      )}
+      {...props}
+    />
+  );
+}
+
+export function Input({
+  className,
+  ...props
+}: React.InputHTMLAttributes<HTMLInputElement>): React.ReactElement {
+  return (
+    <input
+      className={cn(
+        'h-9 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-900 placeholder:text-slate-400 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20',
+        className,
+      )}
+      {...props}
+    />
+  );
+}
+
+export function Separator({ className }: { className?: string }): React.ReactElement {
+  return <div className={cn('h-px w-full bg-slate-200', className)} />;
+}
+
+export function Skeleton({ className }: { className?: string }): React.ReactElement {
+  return <div className={cn('animate-pulse rounded-md bg-slate-200/80', className)} />;
+}
+
+export interface DrawerProps {
+  open: boolean;
+  onClose: () => void;
+  title: string;
+  subtitle?: string;
+  maxWidthClass?: string;
+  children: React.ReactNode;
+}
+
+export function Drawer({
+  open,
+  onClose,
+  title,
+  subtitle,
+  maxWidthClass = 'max-w-2xl',
+  children,
+}: DrawerProps): React.ReactElement | null {
+  useEffect(() => {
+    if (!open) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [open, onClose]);
+
+  if (!open) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 flex justify-end" role="dialog" aria-modal="true" aria-label={title}>
+      <div
+        className="fixed inset-0 bg-slate-900/40 backdrop-blur-[1px]"
+        onClick={onClose}
+        aria-hidden="true"
+      />
+      <div
+        className={cn(
+          'relative z-10 flex h-full w-full flex-col bg-white shadow-2xl border-l border-slate-200',
+          maxWidthClass,
+        )}
+      >
+        <div className="flex items-start justify-between gap-4 border-b border-slate-200 px-6 py-4">
+          <div className="min-w-0">
+            <h2 className="text-base font-semibold text-slate-900 truncate">{title}</h2>
+            {subtitle && <p className="mt-0.5 text-xs text-slate-500 truncate">{subtitle}</p>}
+          </div>
+          <Button variant="ghost" size="icon" onClick={onClose} aria-label="Close drawer">
+            <X className="h-4 w-4" />
+          </Button>
+        </div>
+        <div className="flex-1 overflow-y-auto px-6 py-5">{children}</div>
+      </div>
+    </div>
+  );
+}

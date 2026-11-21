@@ -1,0 +1,71 @@
+name: Build & Publish Data Shards (Split-Repo Orphan gh-pages)
+
+on:
+  workflow_dispatch:
+    inputs:
+      topics:
+        description: "Optional comma-separated topic subset (leave blank for full 31-topic build)"
+        required: false
+        default: ""
+      source_dir:
+        description: "Path inside workspace containing curated Markdown questions"
+        required: false
+        default: "source_discussions"
+  push:
+    branches:
+      - main
+    paths:
+      - "pipeline/**"
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-publish-data:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Python ETL dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ./pipeline
+
+      - name: Run ETL unit tests
+        run: pytest pipeline/tests/test_etl.py -v
+
+      - name: Build Parquet & Vector Shards (when source corpus is present)
+        id: etl
+        env:
+          TOPICS_FILTER: ${{ inputs.topics || '' }}
+          SOURCE_DIR: ${{ inputs.source_dir || 'source_discussions' }}
+        run: |
+          if [ ! -d "$SOURCE_DIR" ]; then
+            echo "No $SOURCE_DIR directory checked out in CI; skipping shard rebuild (use local.py --full for local corpus)."
+            echo "built=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          ARGS="--input-dir $SOURCE_DIR --output-dir ./dist_data"
+          if [ -n "$TOPICS_FILTER" ]; then
+            ARGS="$ARGS --topics $TOPICS_FILTER"
+          fi
+          python -m pipeline.build_shards $ARGS
+          python local.py --data-dir ./dist_data --skip-etl --check
+          echo "built=true" >> "$GITHUB_OUTPUT"
+
+      - name: Deploy Data Shards to Orphan gh-pages Branch (Zero History Bloat)
+        if: steps.etl.outputs.built == 'true' && (vars.DATA_REPO_SLUG != '' || github.event_name == 'workflow_dispatch')
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          personal_token: ${{ secrets.DATA_REPO_DEPLOY_TOKEN || secrets.GITHUB_TOKEN }}
+          external_repository: ${{ vars.DATA_REPO_SLUG || github.repository }}
+          publish_branch: gh-pages
+          publish_dir: ./dist_data
+          force_orphan: true
+          commit_message: "chore(data): publish MLS OER Parquet & vector shards [skip ci]"

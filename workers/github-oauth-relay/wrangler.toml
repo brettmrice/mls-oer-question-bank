@@ -1,0 +1,11 @@
+name = "mls-oer-github-oauth-relay"
+main = "worker.ts"
+compatibility_date = "2026-04-01"
+
+[vars]
+# Comma-separated origins allowed to exchange GitHub OAuth codes
+ALLOWED_ORIGINS = "https://brettmrice.github.io, https://educators.mlsascp.prof,http://localhost:5173,http://127.0.0.1:5173"
+
+# Configure encrypted secrets via Wrangler before deploying:
+#   wrangler secret put GITHUB_CLIENT_ID
+#   wrangler secret put GITHUB_CLIENT_SECRET
