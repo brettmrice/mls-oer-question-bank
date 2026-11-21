@@ -27,6 +27,11 @@ from pipeline.parse_md import compute_content_hash, parse_all_markdown
 
 MAPPINGS_DIR = DEFAULT_INPUT_DIR.parent
 
+pytestmark = pytest.mark.skipif(
+    not DEFAULT_INPUT_DIR.exists(),
+    reason="Local MLS OER source corpus not present in this environment.",
+)
+
 
 def test_parse_mappings_all_eight() -> None:
     mappings = load_guideline_mappings(MAPPINGS_DIR)

@@ -11,11 +11,6 @@ on:
         description: "Path inside workspace containing curated Markdown questions"
         required: false
         default: "source_discussions"
-  push:
-    branches:
-      - main
-    paths:
-      - "pipeline/**"
 
 permissions:
   contents: write
@@ -35,9 +30,11 @@ jobs:
       - name: Install Python ETL dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -e ./pipeline
+          pip install polars pyarrow sentence-transformers numpy tqdm pydantic pytest
 
       - name: Run ETL unit tests
+        env:
+          PYTHONPATH: .
         run: pytest pipeline/tests/test_etl.py -v
 
       - name: Build Parquet & Vector Shards (when source corpus is present)
