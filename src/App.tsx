@@ -4,6 +4,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Download,
+  ListFilter,
   Plus,
   SlidersHorizontal,
   Sparkles,
@@ -121,7 +122,14 @@ export function App(): React.ReactElement {
   const [questions, setQuestions] = useState<QuestionRecord[]>([]);
   const [totalCount, setTotalCount] = useState<number>(0);
   const [shardsQueried, setShardsQueried] = useState<number>(0);
-  const [queryElapsedMs, setQueryElapsedMs] = useState<number>(0);
+  const [avgLoadTimeMs, setAvgLoadTimeMs] = useState<number>(0);
+  const loadTimeStatsRef = useRef<{ totalMs: number; count: number }>({ totalMs: 0, count: 0 });
+  const recordLoadTime = useCallback((ms: number) => {
+    const stats = loadTimeStatsRef.current;
+    stats.totalMs += ms;
+    stats.count += 1;
+    setAvgLoadTimeMs(Math.round(stats.totalMs / stats.count));
+  }, []);
   const [loading, setLoading] = useState<boolean>(true);
   const [queryError, setQueryError] = useState<string | null>(null);
 
@@ -163,6 +171,14 @@ export function App(): React.ReactElement {
 
   const isSemanticActive =
     semanticPrompt.trim().length > 0 && activeSemanticShards.length > 0;
+
+  const hasSelectedTopics =
+    filters.disciplines.length > 0 ||
+    filters.topicCodes.length > 0 ||
+    filters.subtopics.length > 0 ||
+    filters.leafTopics.length > 0 ||
+    filters.ascpPaths.length > 0;
+  const showTopicSelectionPrompt = !hasSelectedTopics && !isSemanticActive;
 
   const refreshWorkspace = useCallback(async (preferredActiveId?: string | null) => {
     const [quizList, storedActive, savedList, status, allRemixes] = await Promise.all([
@@ -314,6 +330,15 @@ export function App(): React.ReactElement {
 
   useEffect(() => {
     if (!manifest || isSemanticActive || activeView !== 'explore') return;
+    if (showTopicSelectionPrompt) {
+      querySeqRef.current += 1;
+      setQuestions([]);
+      setTotalCount(0);
+      setShardsQueried(0);
+      setLoading(false);
+      setQueryError(null);
+      return;
+    }
     const seq = ++querySeqRef.current;
     setLoading(true);
     setQueryError(null);
@@ -324,7 +349,7 @@ export function App(): React.ReactElement {
         setQuestions(res.items);
         setTotalCount(res.total);
         setShardsQueried(res.shardsQueried);
-        setQueryElapsedMs(res.elapsedMs);
+        recordLoadTime(res.elapsedMs);
         setLoading(false);
       })
       .catch((err: unknown) => {
@@ -332,7 +357,7 @@ export function App(): React.ReactElement {
         setQueryError(err instanceof Error ? err.message : String(err));
         setLoading(false);
       });
-  }, [manifest, filters, isSemanticActive, activeView]);
+  }, [manifest, filters, isSemanticActive, activeView, showTopicSelectionPrompt]);
 
   const semanticFilterKey = useMemo(
     () =>
@@ -365,6 +390,7 @@ export function App(): React.ReactElement {
           totalMs: out.totalMs,
           centroidSuggestions: out.centroidSuggestions,
         });
+        recordLoadTime(out.totalMs);
         setSemanticLoading(false);
       })
       .catch((err: unknown) => {
@@ -539,7 +565,7 @@ export function App(): React.ReactElement {
   }, [isSemanticActive, semanticResults, questions, filters.page, filters.pageSize]);
 
   useEffect(() => {
-    if (displayedItems.length === 0) {
+    if (showTopicSelectionPrompt || displayedItems.length === 0) {
       setFocusedQuestionId(null);
       return;
     }
@@ -775,6 +801,8 @@ export function App(): React.ReactElement {
                 activeSemanticShards={activeSemanticShards}
                 semanticPrompt={semanticPrompt}
                 semanticLoading={semanticLoading}
+                selectedCount={showTopicSelectionPrompt ? 0 : displayedTotal}
+                loadTimeMs={avgLoadTimeMs}
                 onUpdateFilters={updateFilters}
                 onResetFilters={resetFilters}
                 onOpenSemanticModal={() => openSemanticModal()}
@@ -824,6 +852,8 @@ export function App(): React.ReactElement {
                     activeSemanticShards={activeSemanticShards}
                     semanticPrompt={semanticPrompt}
                     semanticLoading={semanticLoading}
+                    selectedCount={showTopicSelectionPrompt ? 0 : displayedTotal}
+                    loadTimeMs={avgLoadTimeMs}
                     onUpdateFilters={updateFilters}
                     onResetFilters={resetFilters}
                     onOpenSemanticModal={() => {
@@ -860,58 +890,17 @@ export function App(): React.ReactElement {
                     <SlidersHorizontal className="h-3.5 w-3.5" />
                     Filters
                   </Button>
-                  <p
-                    className={`text-sm text-[var(--text-secondary)] transition-opacity duration-200 ${
-                      isBusy && displayedItems.length > 0 ? 'opacity-60' : 'opacity-100'
-                    }`}
-                  >
-                    {isBusy && displayedItems.length === 0 ? (
-                      <span>
-                        {isSemanticActive
-                          ? `Running hybrid semantic + BM25 search across ${activeSemanticShards.length} shard(s)...`
-                          : `Querying ${targetShardCount} Parquet shards via DuckDB-WASM...`}
-                      </span>
-                    ) : isSemanticActive ? (
-                      <span>
-                        Ranked{' '}
-                        <strong className="font-semibold text-[var(--text-primary)]">
-                          {displayedTotal.toLocaleString()}
-                        </strong>{' '}
-                        hybrid semantic matches{' '}
-                        <span className="text-xs text-[var(--text-secondary)]">
-                          ({activeSemanticShards.length} active shard
-                          {activeSemanticShards.length === 1 ? '' : 's'}
-                          {semanticMeta
-                            ? ` • ${semanticMeta.embedMs} ms embed • ${semanticMeta.totalMs} ms total`
-                            : ''}
-                          )
-                        </span>
-                      </span>
-                    ) : (
-                      <span>
-                        Showing{' '}
-                        <strong className="font-semibold text-[var(--text-primary)]">
-                          {displayedTotal.toLocaleString()}
-                        </strong>{' '}
-                        matching questions{' '}
-                        <span className="text-xs text-[var(--text-secondary)]">
-                          ({shardsQueried} {shardsQueried === 1 ? 'shard' : 'shards'} •{' '}
-                          {queryElapsedMs} ms)
-                        </span>
-                      </span>
-                    )}
-                  </p>
                 </div>
 
                 <div className="flex flex-wrap items-center gap-2">
                   <Button
                     variant="outline"
                     size="sm"
-                    disabled={isBusy || displayedItems.length === 0}
+                    disabled={isBusy || showTopicSelectionPrompt || displayedItems.length === 0}
                     onClick={handleAddPageToQuiz}
                   >
                     <Plus className="h-3.5 w-3.5" />
-                    Add Page ({displayedItems.length})
+                    Add Page ({showTopicSelectionPrompt ? 0 : displayedItems.length})
                   </Button>
 
                   {!isSemanticActive && (
@@ -1030,7 +1019,33 @@ export function App(): React.ReactElement {
             )}
 
             {/* Question List */}
-            {isBusy && displayedItems.length === 0 ? (
+            {showTopicSelectionPrompt ? (
+              <div className="flex min-h-0 flex-1 items-center justify-center p-4">
+                <Card className="max-w-md p-8 text-center space-y-3">
+                  <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-full bg-[var(--bg-subtle,rgba(148,163,184,0.12))] text-[var(--text-secondary)]">
+                    <ListFilter className="h-5 w-5" />
+                  </div>
+                  <div className="space-y-1">
+                    <h2 className="text-sm font-semibold text-[var(--text-primary)]">
+                      Select one or more topics
+                    </h2>
+                    <p className="text-xs text-[var(--text-secondary)]">
+                      Choose a discipline or topic from the Topics filter to view matching questions.
+                    </p>
+                  </div>
+                  <div className="pt-1 lg:hidden">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setMobileFiltersOpen(true)}
+                    >
+                      <SlidersHorizontal className="h-3.5 w-3.5" />
+                      Select Topics
+                    </Button>
+                  </div>
+                </Card>
+              </div>
+            ) : isBusy && displayedItems.length === 0 ? (
               <OverflowBlurScrollArea
                 className="min-h-0 flex-1"
                 scrollClassName="pr-1"
@@ -1110,7 +1125,7 @@ export function App(): React.ReactElement {
             )}
 
             {/* Pagination */}
-            {displayedTotal > 0 && (
+            {!showTopicSelectionPrompt && displayedTotal > 0 && (
               <Card className="shrink-0 flex flex-wrap items-center justify-between gap-3 px-4 py-3">
                 <span className="text-xs text-[var(--text-secondary)]">
                   Page <strong className="text-[var(--text-primary)]">{filters.page}</strong> of{' '}

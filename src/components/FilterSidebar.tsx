@@ -1,6 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
-  Check,
   ChevronDown,
   ChevronRight,
   Lock,
@@ -10,7 +9,7 @@ import {
   Search,
   Sparkles,
 } from 'lucide-react';
-import { Badge, Button, Card, Input } from '@/components/ui/primitives';
+import { Badge, Button, Card, Checkbox as TreeCheckbox, Input } from '@/components/ui/primitives';
 import { BLOOM_META, cn } from '@/lib/utils';
 import type {
   AscpPathFacet,
@@ -28,6 +27,8 @@ export interface FilterSidebarProps {
   activeSemanticShards: string[];
   semanticPrompt: string;
   semanticLoading: boolean;
+  selectedCount: number;
+  loadTimeMs: number;
   onUpdateFilters: (patch: Partial<FilterState>) => void;
   onResetFilters: () => void;
   onOpenSemanticModal: () => void;
@@ -92,59 +93,12 @@ function toggleArrayItem(list: string[], value: string): string[] {
 
 type SidebarSectionId = 'topics' | 'bloom' | 'difficulty' | 'questionType' | 'keyword';
 
-function TreeCheckbox({
-  checked,
-  partial = false,
-  sizeClass = 'h-3.5 w-3.5',
-  onChange,
-  ariaLabel,
-}: {
-  checked: boolean;
-  partial?: boolean;
-  sizeClass?: string;
-  onChange: () => void;
-  ariaLabel?: string;
-}): React.ReactElement {
-  if (partial && !checked) {
-    return (
-      <span className={cn('relative inline-flex shrink-0 items-center justify-center', sizeClass)}>
-        <input
-          type="checkbox"
-          checked={false}
-          onChange={onChange}
-          aria-label={ariaLabel}
-          className={cn(
-            sizeClass,
-            'appearance-none rounded border border-slate-400 bg-transparent focus:ring-indigo-500 cursor-pointer',
-          )}
-        />
-        <Check
-          className="pointer-events-none absolute h-3 w-3 text-blue-600"
-          strokeWidth={3}
-          aria-hidden="true"
-        />
-      </span>
-    );
-  }
-  return (
-    <input
-      type="checkbox"
-      checked={checked}
-      onChange={onChange}
-      aria-label={ariaLabel}
-      className={cn(
-        sizeClass,
-        'shrink-0 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer',
-      )}
-    />
-  );
-}
-
 interface CollapsibleFilterCardProps {
   title: React.ReactNode;
   collapsed: boolean;
   onToggle: () => void;
   headerAction?: React.ReactNode;
+  footer?: React.ReactNode;
   children: React.ReactNode;
 }
 
@@ -156,6 +110,7 @@ function CollapsibleFilterCard({
   collapsed,
   onToggle,
   headerAction,
+  footer,
   children,
 }: CollapsibleFilterCardProps): React.ReactElement {
   return (
@@ -179,6 +134,7 @@ function CollapsibleFilterCard({
         {headerAction}
       </div>
       {!collapsed && <div className="mt-3">{children}</div>}
+      {footer}
     </Card>
   );
 }
@@ -192,6 +148,8 @@ export function FilterSidebar({
   activeSemanticShards,
   semanticPrompt,
   semanticLoading,
+  selectedCount,
+  loadTimeMs,
   onUpdateFilters,
   onResetFilters,
   onOpenSemanticModal,
@@ -664,12 +622,36 @@ export function FilterSidebar({
     );
   };
 
+  const selectedPct =
+    manifest.totalQuestions > 0
+      ? Math.round((selectedCount / manifest.totalQuestions) * 100)
+      : 0;
+
   return (
     <aside className="flex flex-col gap-4">
       <CollapsibleFilterCard
-        title="Question Bank"
+        title={
+          <>
+            Question Bank | {manifest.totalQuestions.toLocaleString()}{' '}
+            <span className="normal-case font-normal" title="Running average load time">
+              (avg {loadTimeMs} ms)
+            </span>
+          </>
+        }
         collapsed={collapsedSections.topics}
         onToggle={() => toggleSection('topics')}
+        footer={
+          <div className="mt-3 border-t border-[var(--border-color)] pt-2.5 text-center text-xs font-medium text-[var(--text-secondary)]">
+            Selected |{' '}
+            <span className="font-semibold text-[var(--text-primary)]">
+              {selectedCount.toLocaleString()}
+            </span>{' '}
+            |{' '}
+            <span className="font-semibold text-[var(--text-primary)]">
+              {selectedPct}%
+            </span>
+          </div>
+        }
       >
         <div className="space-y-2">
           {disciplineGroups.map((disc) => {

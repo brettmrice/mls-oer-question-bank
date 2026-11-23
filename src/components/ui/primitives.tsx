@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { X } from 'lucide-react';
+import { Check, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
@@ -160,5 +160,57 @@ export function Drawer({
         <div className="flex-1 overflow-y-auto px-6 py-5">{children}</div>
       </div>
     </div>
+  );
+}
+
+export interface CheckboxProps {
+  checked: boolean;
+  partial?: boolean;
+  onChange: React.ChangeEventHandler<HTMLInputElement>;
+  disabled?: boolean;
+  sizeClass?: string;
+  className?: string;
+  ariaLabel?: string;
+}
+
+export function Checkbox({
+  checked,
+  partial = false,
+  onChange,
+  disabled = false,
+  sizeClass = 'h-3.5 w-3.5',
+  className,
+  ariaLabel,
+}: CheckboxProps): React.ReactElement {
+  const isPartial = partial && !checked;
+
+  return (
+    <span className={cn('relative inline-flex shrink-0 items-center justify-center', sizeClass, className)}>
+      <input
+        type="checkbox"
+        checked={checked}
+        disabled={disabled}
+        onChange={onChange}
+        aria-label={ariaLabel}
+        aria-checked={isPartial ? 'mixed' : checked}
+        className={cn(
+          sizeClass,
+          'appearance-none rounded border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#363945]/40 dark:focus-visible:ring-[#EFE1CE]/40',
+          disabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer',
+          checked
+            ? 'border-[#e5d3ba] bg-[#EFE1CE] dark:border-[var(--cream-border)] dark:bg-[#363945]'
+            : isPartial
+              ? 'border-slate-400 bg-transparent dark:border-slate-500 dark:bg-transparent'
+              : 'border-slate-300 bg-transparent dark:border-slate-600 dark:bg-transparent',
+        )}
+      />
+      {(checked || isPartial) && (
+        <Check
+          className="pointer-events-none absolute h-3 w-3 text-[#363945] dark:text-[#EFE1CE]"
+          strokeWidth={3}
+          aria-hidden="true"
+        />
+      )}
+    </span>
   );
 }

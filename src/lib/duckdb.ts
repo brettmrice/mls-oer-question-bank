@@ -6,6 +6,7 @@ import eh_worker from '@duckdb/duckdb-wasm/dist/duckdb-browser-eh.worker.js?url'
 
 import { getAssetUrl } from '@/config/dataSource';
 import { getRemixedQuestionsByIds } from '@/lib/remixStore';
+import { loadOrFetchParquetShard } from '@/lib/shardCache';
 import {
   buildAscpPathFacetQuery,
   buildFacetQuery,
@@ -38,6 +39,7 @@ const MANUAL_BUNDLES: duckdb.DuckDBBundles = {
 
 let dbInitPromise: Promise<{ db: duckdb.AsyncDuckDB; conn: duckdb.AsyncDuckDBConnection }> | null = null;
 const registeredShards = new Set<string>();
+const inFlightRegistrations = new Map<string, Promise<void>>();
 
 export async function getDuckDB(): Promise<{
   db: duckdb.AsyncDuckDB;
@@ -61,16 +63,26 @@ export async function ensureShardsRegistered(
   db: duckdb.AsyncDuckDB,
   shards: ShardManifest[],
 ): Promise<void> {
+  const pending: Promise<void>[] = [];
   for (const shard of shards) {
     const key = shard.parquet.path;
     if (registeredShards.has(key)) continue;
-    await db.registerFileURL(
-      key,
-      getAssetUrl(key),
-      duckdb.DuckDBDataProtocol.HTTP,
-      false,
-    );
-    registeredShards.add(key);
+
+    let regPromise = inFlightRegistrations.get(key);
+    if (!regPromise) {
+      regPromise = (async () => {
+        const buffer = await loadOrFetchParquetShard(shard);
+        await db.registerFileBuffer(key, buffer);
+        registeredShards.add(key);
+      })().finally(() => {
+        inFlightRegistrations.delete(key);
+      });
+      inFlightRegistrations.set(key, regPromise);
+    }
+    pending.push(regPromise);
+  }
+  if (pending.length > 0) {
+    await Promise.all(pending);
   }
 }
 

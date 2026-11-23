@@ -10,7 +10,7 @@ import {
   X,
   XCircle,
 } from 'lucide-react';
-import { Badge, Button, Input, Separator } from '@/components/ui/primitives';
+import { Badge, Button, Checkbox, Input, Separator } from '@/components/ui/primitives';
 import type { DownloadedShardRecord } from '@/lib/db';
 import { recommendShardsByKeywords } from '@/lib/hybridRanker';
 import {
@@ -424,12 +424,11 @@ export function SemanticSearchModal({
                           <div key={shard.shardId} className="px-3.5 py-2.5 space-y-1.5">
                             <label className="flex items-center justify-between gap-2 cursor-pointer">
                               <span className="flex items-center gap-2 min-w-0">
-                                <input
-                                  type="checkbox"
+                                <Checkbox
                                   disabled={isDownloading}
                                   checked={checked}
+                                  sizeClass="h-4 w-4"
                                   onChange={() => toggleShard(shard.shardId)}
-                                  className="h-4 w-4 rounded border-[var(--border-color)] text-indigo-600"
                                 />
                                 <span className="min-w-0">
                                   <span className="block text-xs font-medium text-[var(--text-primary)] truncate">
@@ -528,12 +527,12 @@ export function SemanticSearchModal({
 
           {totalDownloadBytes > 0 && (
             <label className="flex items-start gap-2.5 text-xs text-[var(--text-primary)] cursor-pointer">
-              <input
-                type="checkbox"
+              <Checkbox
                 disabled={isDownloading}
                 checked={consentChecked}
+                sizeClass="h-4 w-4"
+                className="mt-0.5"
                 onChange={(e) => setConsentChecked(e.target.checked)}
-                className="mt-0.5 h-4 w-4 rounded border-[var(--border-color)] text-indigo-600"
               />
               <span>
                 I agree to download{' '}

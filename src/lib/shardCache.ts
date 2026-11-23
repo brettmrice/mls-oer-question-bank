@@ -3,6 +3,7 @@ import { db, type DownloadedShardRecord } from '@/lib/db';
 import type { ManifestData, ShardManifest } from '@/types/question';
 
 export const SHARD_CACHE_NAME = 'mls-oer-semantic-shards-v1';
+export const PARQUET_SHARD_CACHE_NAME = 'mls-oer-parquet-shards-v1';
 
 export type ShardCacheStatus = 'cached' | 'update_available' | 'not_downloaded';
 
@@ -218,9 +219,50 @@ export async function markSemanticModelCached(modelId: string): Promise<void> {
   });
 }
 
+export async function loadOrFetchParquetShard(shard: ShardManifest): Promise<Uint8Array> {
+  const cacheKey = buildVersionedCacheKey(shard.parquet.path, shard.parquet.sha256);
+
+  if ('caches' in globalThis) {
+    try {
+      const cache = await caches.open(PARQUET_SHARD_CACHE_NAME);
+      const hit = await cache.match(cacheKey);
+      if (hit) {
+        return new Uint8Array(await hit.arrayBuffer());
+      }
+    } catch {
+      // Ignore Cache API read errors in restricted contexts
+    }
+  }
+
+  const response = await fetch(getAssetUrl(shard.parquet.path));
+  if (!response.ok) {
+    throw new Error(
+      `HTTP ${response.status} ${response.statusText} fetching ${shard.parquet.path}`,
+    );
+  }
+  const buffer = await response.arrayBuffer();
+
+  if ('caches' in globalThis) {
+    try {
+      const cache = await caches.open(PARQUET_SHARD_CACHE_NAME);
+      await cache.put(
+        cacheKey,
+        new Response(buffer, {
+          headers: { 'Content-Type': 'application/octet-stream' },
+        }),
+      );
+    } catch {
+      // Ignore Cache API write errors (e.g. quota exceeded)
+    }
+  }
+
+  return new Uint8Array(buffer);
+}
+
 export async function clearAllCachedShards(): Promise<void> {
   if ('caches' in globalThis) {
     await caches.delete(SHARD_CACHE_NAME);
+    await caches.delete(PARQUET_SHARD_CACHE_NAME);
     await caches.delete('transformers-cache');
   }
   await db.downloadedShards.clear();

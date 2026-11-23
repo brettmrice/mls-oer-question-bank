@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Download, FileCode, FileSpreadsheet, FileText, Printer } from 'lucide-react';
-import { Button } from '@/components/ui/primitives';
+import { Button, Checkbox } from '@/components/ui/primitives';
 import {
   sanitizeFilename,
   triggerBlobDownload,
@@ -118,11 +118,9 @@ export function QuizExportButtons({
       </div>
 
       <label className="flex items-center gap-2 text-xs text-slate-600 cursor-pointer">
-        <input
-          type="checkbox"
+        <Checkbox
           checked={includeAnswerKey}
           onChange={(e) => setIncludeAnswerKey(e.target.checked)}
-          className="h-3.5 w-3.5 rounded border-slate-300 text-indigo-600"
         />
         <span>Include Answer Key &amp; Rationales in Printable HTML / Markdown exports</span>
       </label>
