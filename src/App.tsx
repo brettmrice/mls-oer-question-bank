@@ -20,7 +20,7 @@ import { QuizManagerDrawer } from '@/components/QuizManagerDrawer';
 import { SemanticSearchModal } from '@/components/SemanticSearchModal';
 import { StudentPracticeView } from '@/components/StudentPracticeView';
 import { OverflowBlurScrollArea } from '@/components/ui/OverflowBlurScrollArea';
-import { Badge, Button, Card, Skeleton } from '@/components/ui/primitives';
+import { Button, Card, Skeleton } from '@/components/ui/primitives';
 import { getDataBaseUrl } from '@/config/dataSource';
 import type { QuizWorkspaceRecord, RemixedQuestionRecord } from '@/lib/db';
 import {
