@@ -12,17 +12,34 @@ export function escapeSqlLike(value: string): string {
 
 export function selectTargetShards(
   manifest: ManifestData,
-  filters: Pick<FilterState, 'disciplines' | 'topicCodes'>,
+  filters: Pick<FilterState, 'disciplines' | 'topicCodes'> & { ascpPaths?: string[] },
 ): ShardManifest[] {
-  if (filters.topicCodes.length > 0) {
-    const allowed = new Set(filters.topicCodes);
-    return manifest.shards.filter((s) => allowed.has(s.topicCode));
+  const hasAscpPaths = (filters.ascpPaths?.length ?? 0) > 0;
+  if (!hasAscpPaths) {
+    if (filters.topicCodes.length > 0) {
+      const allowed = new Set(filters.topicCodes);
+      return manifest.shards.filter((s) => allowed.has(s.topicCode));
+    }
+    if (filters.disciplines.length > 0) {
+      const allowed = new Set(filters.disciplines);
+      return manifest.shards.filter((s) => allowed.has(s.disciplineCode));
+    }
+    return manifest.shards;
   }
-  if (filters.disciplines.length > 0) {
-    const allowed = new Set(filters.disciplines);
-    return manifest.shards.filter((s) => allowed.has(s.disciplineCode));
-  }
-  return manifest.shards;
+
+  const allowedTopics = new Set(filters.topicCodes);
+  const allowedDiscs = new Set(filters.disciplines);
+  const allowedDiscNames = new Set(
+    (filters.ascpPaths ?? [])
+      .map((p) => p.split(' > ')[0]?.trim())
+      .filter((n): n is string => Boolean(n)),
+  );
+  return manifest.shards.filter(
+    (s) =>
+      allowedTopics.has(s.topicCode) ||
+      allowedDiscs.has(s.disciplineCode) ||
+      allowedDiscNames.has(s.disciplineName),
+  );
 }
 
 export function formatParquetSource(parquetPaths: string[]): string {
@@ -52,12 +69,29 @@ export function buildWhereClause(
 ): string {
   const clauses: string[] = [];
 
+  let ascpPathClause: string | null = null;
+  if (!options.excludeHierarchySubLevels && filters.ascpPaths.length > 0) {
+    const branchClauses = filters.ascpPaths.map((path) => {
+      const exact = `'${escapeSqlString(path)}'`;
+      const prefix = `'${escapeSqlLike(path)} > %'`;
+      return `(ascp_path = ${exact} OR ascp_path LIKE ${prefix} ESCAPE '\\')`;
+    });
+    ascpPathClause = `(${branchClauses.join(' OR ')})`;
+  }
+
   if (!options.excludeTopicScope) {
     const discClause = buildInClause('discipline_code', filters.disciplines);
-    if (discClause) clauses.push(discClause);
-
     const topicClause = buildInClause('topic_code', filters.topicCodes);
-    if (topicClause) clauses.push(topicClause);
+    if (ascpPathClause && (discClause || topicClause)) {
+      const scopeParts = [discClause, topicClause, ascpPathClause].filter(Boolean);
+      clauses.push(`(${scopeParts.join(' OR ')})`);
+    } else {
+      if (discClause) clauses.push(discClause);
+      if (topicClause) clauses.push(topicClause);
+      if (ascpPathClause) clauses.push(ascpPathClause);
+    }
+  } else if (ascpPathClause) {
+    clauses.push(ascpPathClause);
   }
 
   if (!options.excludeHierarchySubLevels) {
@@ -112,20 +146,25 @@ export function buildWhereClause(
 
 export function buildOrderByClause(sortBy: SortOption): string {
   switch (sortBy) {
-    case 'difficulty_asc':
-      return 'ORDER BY difficulty ASC, topic_code ASC, display_id ASC';
     case 'difficulty_desc':
       return 'ORDER BY difficulty DESC, topic_code ASC, display_id ASC';
+    case 'bloom_asc':
+      return (
+        "ORDER BY CASE bloom_level WHEN 'RE' THEN 1 WHEN 'UN' THEN 2 WHEN 'AP' THEN 3 WHEN 'AN' THEN 4 ELSE 5 END ASC, " +
+        'difficulty ASC, topic_code ASC, display_id ASC'
+      );
     case 'bloom_desc':
       return (
         "ORDER BY CASE bloom_level WHEN 'AN' THEN 4 WHEN 'AP' THEN 3 WHEN 'UN' THEN 2 WHEN 'RE' THEN 1 ELSE 0 END DESC, " +
         'difficulty DESC, topic_code ASC, display_id ASC'
       );
-    case 'display_id_asc':
-      return 'ORDER BY display_id ASC, id ASC';
     case 'topic_asc':
-    default:
       return 'ORDER BY topic_code ASC, bloom_level ASC, difficulty ASC, display_id ASC';
+    case 'topic_desc':
+      return 'ORDER BY topic_code DESC, bloom_level ASC, difficulty ASC, display_id ASC';
+    case 'difficulty_asc':
+    default:
+      return 'ORDER BY difficulty ASC, topic_code ASC, display_id ASC';
   }
 }
 
@@ -185,6 +224,24 @@ export function buildFacetQuery(parquetPaths: string[], filters: FilterState): s
     ${where}
     GROUP BY ascp_subtopic, leaf_topic
     ORDER BY ascp_subtopic ASC, cnt DESC, leaf_topic ASC
+  `.trim();
+}
+
+export function buildAscpPathFacetQuery(parquetPaths: string[], filters: FilterState): string {
+  const source = formatParquetSource(parquetPaths);
+  const where = buildWhereClause(filters, {
+    excludeHierarchySubLevels: true,
+    excludeTopicScope: true,
+  });
+  return `
+    SELECT
+      topic_code,
+      ascp_path,
+      COUNT(*) AS cnt
+    FROM ${source}
+    ${where}
+    GROUP BY topic_code, ascp_path
+    ORDER BY topic_code ASC, MIN(taxonomic_code) ASC, ascp_path ASC
   `.trim();
 }
 

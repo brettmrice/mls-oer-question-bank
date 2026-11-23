@@ -81,35 +81,35 @@ const TRACKER_LABEL_FILTERS = [
 
 function IssueRow({ issue }: { issue: GitHubIssueSummary }): React.ReactElement {
   return (
-    <div className="rounded-lg border border-slate-200 bg-white p-3 space-y-1.5">
+    <div className="rounded-lg border border-[var(--border-color)] bg-[var(--bg-surface)] p-3 space-y-1.5">
       <div className="flex items-start justify-between gap-2">
         <a
           href={issue.html_url}
           target="_blank"
           rel="noreferrer"
-          className="text-sm font-medium text-slate-900 hover:text-indigo-700 inline-flex items-start gap-1"
+          className="text-sm font-medium text-[var(--text-primary)] hover:text-indigo-700 inline-flex items-start gap-1"
         >
           <span>
             #{issue.number} {issue.title}
           </span>
-          <ExternalLink className="h-3.5 w-3.5 mt-0.5 shrink-0 text-slate-400" />
+          <ExternalLink className="h-3.5 w-3.5 mt-0.5 shrink-0 text-[var(--text-secondary)]" />
         </a>
         <Badge
           variant="default"
           className={
             issue.state === 'open'
               ? 'bg-emerald-100 text-emerald-800 border-emerald-200 shrink-0'
-              : 'bg-slate-200 text-slate-700 border-slate-300 shrink-0'
+              : 'bg-slate-200 dark:bg-slate-700 text-[var(--text-primary)] border-[var(--border-color)] shrink-0'
           }
         >
           {issue.state}
         </Badge>
       </div>
 
-      <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-500">
+      <div className="flex flex-wrap items-center gap-2 text-[11px] text-[var(--text-secondary)]">
         <span>by @{issue.authorLogin}</span>
         <span>Updated {new Date(issue.updated_at).toLocaleDateString()}</span>
-        <span className="inline-flex items-center gap-1 text-slate-600 font-medium">
+        <span className="inline-flex items-center gap-1 text-[var(--text-secondary)] font-medium">
           <ThumbsUp className="h-3 w-3" />
           +{issue.plusOneCount}
         </span>
@@ -301,7 +301,7 @@ export function FeedbackDrawer({
               <div className="min-w-0">
                 {githubSession ? (
                   <div className="flex flex-wrap items-center gap-2">
-                    <span className="text-sm font-semibold text-slate-900">
+                    <span className="text-sm font-semibold text-[var(--text-primary)]">
                       Signed in as @{githubSession.username}
                     </span>
                     <Badge variant="accent" className="text-[10px] uppercase">
@@ -309,11 +309,11 @@ export function FeedbackDrawer({
                     </Badge>
                   </div>
                 ) : (
-                  <p className="text-sm font-semibold text-slate-900">
+                  <p className="text-sm font-semibold text-[var(--text-primary)]">
                     Connect GitHub (Optional — Required for In-App Submission &amp; Private Gist Sync)
                   </p>
                 )}
-                <p className="text-xs text-slate-600 mt-0.5 flex items-center gap-1">
+                <p className="text-xs text-[var(--text-secondary)] mt-0.5 flex items-center gap-1">
                   <ShieldCheck className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
                   <span>
                     Zero OER user database: tokens stay only in your browser IndexedDB; relay exchanges OAuth codes statelessly.
@@ -350,7 +350,7 @@ export function FeedbackDrawer({
           </div>
 
           {!githubSession && !cfg.isOAuthConfigured && (
-            <p className="text-[11px] text-slate-500">
+            <p className="text-[11px] text-[var(--text-secondary)]">
               1-click OAuth is waiting on <code className="font-mono">VITE_GITHUB_CLIENT_ID</code> &amp;{' '}
               <code className="font-mono">VITE_OAUTH_RELAY_URL</code>. You can connect immediately using a GitHub Personal Access Token (
               <code className="font-mono">gist</code>, <code className="font-mono">public_repo</code>) or submit via pre-filled GitHub links.
@@ -365,7 +365,7 @@ export function FeedbackDrawer({
                 onChange={(e) => setPatInput(e.target.value)}
                 placeholder="Paste ghp_... or github_pat_... token"
                 aria-label="GitHub Personal Access Token"
-                className="flex-1 min-w-[220px] h-8 text-xs bg-white"
+                className="flex-1 min-w-[220px] h-8 text-xs bg-[var(--bg-surface)]"
               />
               <Button type="submit" variant="primary" size="sm" disabled={authBusy}>
                 {authBusy ? 'Verifying...' : 'Connect Token'}
@@ -381,7 +381,7 @@ export function FeedbackDrawer({
         </Card>
 
         {/* Sub-Navigation Tabs */}
-        <div className="flex items-center gap-1 rounded-xl border border-slate-200 bg-slate-100 p-1">
+        <div className="flex items-center gap-1 rounded-xl border border-[var(--border-color)] bg-[var(--bg-primary)] p-1">
           {[
             { id: 'submit' as const, label: 'Submit Feedback' },
             { id: 'tracker' as const, label: 'Live Tracker' },
@@ -393,8 +393,8 @@ export function FeedbackDrawer({
               onClick={() => setActiveTab(tab.id)}
               className={`flex-1 rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors cursor-pointer ${
                 activeTab === tab.id
-                  ? 'bg-white text-indigo-700 shadow-2xs'
-                  : 'text-slate-600 hover:text-slate-900'
+                  ? 'bg-[var(--bg-surface)] text-indigo-700 shadow-2xs'
+                  : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
               }`}
             >
               {tab.label}
@@ -406,7 +406,7 @@ export function FeedbackDrawer({
         {activeTab === 'submit' && (
           <form onSubmit={handleSubmitIssue} className="space-y-4">
             <div>
-              <span className="block text-xs font-semibold uppercase tracking-wide text-slate-700 mb-2">
+              <span className="block text-xs font-semibold uppercase tracking-wide text-[var(--text-primary)] mb-2">
                 Feedback Type
               </span>
               <div className="flex flex-wrap gap-2">
@@ -418,7 +418,7 @@ export function FeedbackDrawer({
                     className={`rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors cursor-pointer ${
                       categoryId === cat.id
                         ? 'border-indigo-500 bg-indigo-50 text-indigo-800'
-                        : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
+                        : 'border-[var(--border-color)] bg-[var(--bg-surface)] text-[var(--text-primary)] hover:bg-[var(--bg-primary)]'
                     }`}
                   >
                     {cat.label}
@@ -428,7 +428,7 @@ export function FeedbackDrawer({
             </div>
 
             <div>
-              <label htmlFor="feedback-title" className="block text-xs font-semibold uppercase tracking-wide text-slate-700 mb-1.5">
+              <label htmlFor="feedback-title" className="block text-xs font-semibold uppercase tracking-wide text-[var(--text-primary)] mb-1.5">
                 Title
               </label>
               <Input
@@ -440,7 +440,7 @@ export function FeedbackDrawer({
             </div>
 
             <div>
-              <label htmlFor="feedback-body" className="block text-xs font-semibold uppercase tracking-wide text-slate-700 mb-1.5">
+              <label htmlFor="feedback-body" className="block text-xs font-semibold uppercase tracking-wide text-[var(--text-primary)] mb-1.5">
                 Details
               </label>
               <textarea
@@ -449,7 +449,7 @@ export function FeedbackDrawer({
                 value={issueBody}
                 onChange={(e) => setIssueBody(e.target.value)}
                 placeholder={selectedCategory.placeholder}
-                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+                className="w-full rounded-lg border border-[var(--border-color)] bg-[var(--bg-surface)] px-3 py-2 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-secondary)] focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
               />
             </div>
 
@@ -483,7 +483,7 @@ export function FeedbackDrawer({
                 href={fallbackIssueHref}
                 target="_blank"
                 rel="noreferrer"
-                className="inline-flex h-8 items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 text-xs font-medium text-slate-700 hover:bg-slate-50"
+                className="inline-flex h-8 items-center gap-1.5 rounded-md border border-[var(--border-color)] bg-[var(--bg-surface)] px-3 text-xs font-medium text-[var(--text-primary)] hover:bg-[var(--bg-primary)]"
               >
                 <Github className="h-3.5 w-3.5" />
                 Open Pre-Filled Issue on GitHub
@@ -513,7 +513,7 @@ export function FeedbackDrawer({
                     className={`rounded-md border px-2.5 py-1 text-xs font-medium cursor-pointer ${
                       trackerLabel === f.id
                         ? 'border-indigo-500 bg-indigo-50 text-indigo-700'
-                        : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+                        : 'border-[var(--border-color)] bg-[var(--bg-surface)] text-[var(--text-secondary)] hover:bg-[var(--bg-primary)]'
                     }`}
                   >
                     {f.label}
@@ -526,7 +526,7 @@ export function FeedbackDrawer({
                   aria-label="Issue state filter"
                   value={trackerState}
                   onChange={(e) => setTrackerState(e.target.value as 'open' | 'closed' | 'all')}
-                  className="h-8 rounded-md border border-slate-300 bg-white px-2 text-xs text-slate-700"
+                  className="h-8 rounded-md border border-[var(--border-color)] bg-[var(--bg-surface)] px-2 text-xs text-[var(--text-primary)]"
                 >
                   <option value="open">Open</option>
                   <option value="closed">Closed</option>
@@ -546,9 +546,9 @@ export function FeedbackDrawer({
             )}
 
             {trackerLoading ? (
-              <p className="text-xs text-slate-500 py-4 text-center">Loading repository issues...</p>
+              <p className="text-xs text-[var(--text-secondary)] py-4 text-center">Loading repository issues...</p>
             ) : trackerIssues.length === 0 ? (
-              <div className="rounded-lg border border-dashed border-slate-300 p-6 text-center text-xs text-slate-500">
+              <div className="rounded-lg border border-dashed border-[var(--border-color)] p-6 text-center text-xs text-[var(--text-secondary)]">
                 No matching issues found in <code className="font-mono">{cfg.repo}</code>.
               </div>
             ) : (
@@ -565,18 +565,18 @@ export function FeedbackDrawer({
         {activeTab === 'activity' && (
           <div className="space-y-4">
             {!githubSession ? (
-              <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 p-6 text-center space-y-2">
-                <p className="text-sm font-semibold text-slate-800">
+              <div className="rounded-xl border border-dashed border-[var(--border-color)] bg-[var(--bg-primary)] p-6 text-center space-y-2">
+                <p className="text-sm font-semibold text-[var(--text-primary)]">
                   Sign in with GitHub to inspect your authored errata &amp; discussions
                 </p>
-                <p className="text-xs text-slate-600">
+                <p className="text-xs text-[var(--text-secondary)]">
                   Once signed in above via OAuth or a Personal Access Token, this tab queries GitHub Issues you created or participated in.
                 </p>
               </div>
             ) : (
               <>
                 <div className="flex items-center justify-between">
-                  <p className="text-xs font-semibold text-slate-700">
+                  <p className="text-xs font-semibold text-[var(--text-primary)]">
                     Activity for <span className="text-indigo-700">@{githubSession.username}</span> in{' '}
                     <code className="font-mono">{cfg.repo}</code>
                   </p>
@@ -593,15 +593,15 @@ export function FeedbackDrawer({
                 )}
 
                 {activityLoading ? (
-                  <p className="text-xs text-slate-500 py-4 text-center">Loading your GitHub activity...</p>
+                  <p className="text-xs text-[var(--text-secondary)] py-4 text-center">Loading your GitHub activity...</p>
                 ) : (
                   <div className="space-y-4">
                     <div>
-                      <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-600 mb-2">
+                      <h4 className="text-xs font-semibold uppercase tracking-wide text-[var(--text-secondary)] mb-2">
                         Authored Issues &amp; Errata ({authoredIssues.length})
                       </h4>
                       {authoredIssues.length === 0 ? (
-                        <p className="text-xs text-slate-500">You have not opened any issues in this repository yet.</p>
+                        <p className="text-xs text-[var(--text-secondary)]">You have not opened any issues in this repository yet.</p>
                       ) : (
                         <div className="space-y-2">
                           {authoredIssues.map((issue) => (
@@ -612,11 +612,11 @@ export function FeedbackDrawer({
                     </div>
 
                     <div>
-                      <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-600 mb-2">
+                      <h4 className="text-xs font-semibold uppercase tracking-wide text-[var(--text-secondary)] mb-2">
                         All Involved Threads ({involvedIssues.length})
                       </h4>
                       {involvedIssues.length === 0 ? (
-                        <p className="text-xs text-slate-500">No involved threads found.</p>
+                        <p className="text-xs text-[var(--text-secondary)]">No involved threads found.</p>
                       ) : (
                         <div className="space-y-2">
                           {involvedIssues.map((issue) => (

@@ -30,21 +30,21 @@ export function BlueprintBalanceMeter({
       case 'over':
         return 'bg-rose-50 text-rose-700 border-rose-200';
       default:
-        return 'bg-slate-100 text-slate-600 border-slate-200';
+        return 'bg-[var(--bg-primary)] text-[var(--text-secondary)] border-[var(--border-color)]';
     }
   };
 
   return (
-    <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-4 space-y-4">
+    <div className="rounded-xl border border-[var(--border-color)] bg-[var(--bg-primary)] p-4 space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2">
-          <Target className="h-4 w-4 text-indigo-600" />
-          <h4 className="text-xs font-semibold uppercase tracking-wider text-slate-700">
+          <Target className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
+          <h4 className="text-xs font-semibold uppercase tracking-wider text-[var(--text-primary)]">
             ASCP Blueprint Balance Meter
           </h4>
         </div>
 
-        <div className="inline-flex rounded-lg border border-slate-200 bg-white p-0.5">
+        <div className="inline-flex rounded-lg border border-[var(--border-color)] bg-[var(--bg-surface)] p-0.5">
           {(['MLS', 'MLT', 'Specialist'] as const).map((t) => (
             <button
               key={t}
@@ -53,8 +53,8 @@ export function BlueprintBalanceMeter({
               className={cn(
                 'rounded-md px-2.5 py-1 text-[11px] font-semibold transition cursor-pointer',
                 track === t
-                  ? 'bg-indigo-600 text-white'
-                  : 'text-slate-600 hover:text-slate-900',
+                  ? 'bg-indigo-600 text-white dark:bg-indigo-500'
+                  : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]',
               )}
             >
               {t}
@@ -65,29 +65,29 @@ export function BlueprintBalanceMeter({
 
       {/* Top Metrics */}
       <div className="grid grid-cols-3 gap-2">
-        <div className="rounded-lg border border-slate-200 bg-white px-3 py-2">
-          <span className="block text-[10px] uppercase tracking-wider text-slate-400">
+        <div className="rounded-lg border border-[var(--border-color)] bg-[var(--bg-surface)] px-3 py-2">
+          <span className="block text-[10px] uppercase tracking-wider text-[var(--text-secondary)]">
             Questions
           </span>
-          <span className="text-sm font-bold text-slate-900">
+          <span className="text-sm font-bold text-[var(--text-primary)]">
             {summary.totalQuestions}
           </span>
         </div>
-        <div className="rounded-lg border border-slate-200 bg-white px-3 py-2">
-          <span className="flex items-center gap-1 text-[10px] uppercase tracking-wider text-slate-400">
+        <div className="rounded-lg border border-[var(--border-color)] bg-[var(--bg-surface)] px-3 py-2">
+          <span className="flex items-center gap-1 text-[10px] uppercase tracking-wider text-[var(--text-secondary)]">
             <Gauge className="h-3 w-3" />
             Avg Diff
           </span>
-          <span className="text-sm font-bold text-slate-900">
+          <span className="text-sm font-bold text-[var(--text-primary)]">
             {summary.avgDifficulty} / 10
           </span>
         </div>
-        <div className="rounded-lg border border-slate-200 bg-white px-3 py-2">
-          <span className="flex items-center gap-1 text-[10px] uppercase tracking-wider text-slate-400">
+        <div className="rounded-lg border border-[var(--border-color)] bg-[var(--bg-surface)] px-3 py-2">
+          <span className="flex items-center gap-1 text-[10px] uppercase tracking-wider text-[var(--text-secondary)]">
             <Clock className="h-3 w-3" />
             Est. Time
           </span>
-          <span className="text-sm font-bold text-slate-900">
+          <span className="text-sm font-bold text-[var(--text-primary)]">
             ~{summary.estimatedMinutes} min
           </span>
         </div>
@@ -96,16 +96,16 @@ export function BlueprintBalanceMeter({
       {/* Bloom's Taxonomy Distribution */}
       <div className="space-y-1.5">
         <div className="flex flex-wrap items-center justify-between gap-2 text-[11px]">
-          <span className="font-semibold text-slate-700">Bloom&apos;s Mix</span>
+          <span className="font-semibold text-[var(--text-primary)]">Bloom&apos;s Mix</span>
           <div className="flex flex-wrap gap-1.5">
             {(['RE', 'UN', 'AP', 'AN'] as const).map((b) => (
-              <span key={b} className="font-mono text-slate-600">
+              <span key={b} className="font-mono text-[var(--text-secondary)]">
                 {b}: <strong>{summary.bloomCounts[b]}</strong>
               </span>
             ))}
           </div>
         </div>
-        <div className="flex h-2.5 w-full overflow-hidden rounded-full bg-slate-200">
+        <div className="flex h-2.5 w-full overflow-hidden rounded-full bg-slate-200 dark:bg-slate-700">
           {summary.totalQuestions > 0 &&
             (['RE', 'UN', 'AP', 'AN'] as const).map((b) => {
               const pct = (summary.bloomCounts[b] / summary.totalQuestions) * 100;
@@ -142,10 +142,10 @@ export function BlueprintBalanceMeter({
                 >
                   {row.disciplineCode}
                 </span>
-                <span className="truncate text-slate-700">{row.disciplineName}</span>
+                <span className="truncate text-[var(--text-primary)]">{row.disciplineName}</span>
               </div>
               <div className="flex items-center gap-1.5 shrink-0">
-                <span className="font-mono text-[11px] text-slate-700">
+                <span className="font-mono text-[11px] text-[var(--text-secondary)]">
                   {row.count} ({row.actualPct}%)
                 </span>
                 {row.targetLabel && (
@@ -155,7 +155,7 @@ export function BlueprintBalanceMeter({
                 )}
               </div>
             </div>
-            <div className="relative h-1.5 w-full rounded-full bg-slate-200 overflow-hidden">
+            <div className="relative h-1.5 w-full rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden">
               {row.targetMinPct !== null && row.targetMaxPct !== null && (
                 <div
                   className="absolute top-0 bottom-0 bg-emerald-200/70"

@@ -400,6 +400,7 @@ def publish_data_to_orphan_branch(
     branch: str = "gh-pages",
     commit_message: str = "Publish MLS OER Parquet & int8 vector shards (CC0 1.0)",
     verify: bool = True,
+    cname: str | None = None,
 ) -> None:
     """Verify built data shards and force-push an orphan Git branch with zero history bloat."""
     clean_repo = repo_url.strip()
@@ -418,6 +419,8 @@ def publish_data_to_orphan_branch(
         stage_dir = tmp_dir / "stage"
         shutil.copytree(data_dir, stage_dir, ignore=shutil.ignore_patterns(".git"))
         (stage_dir / ".nojekyll").write_text("", encoding="utf-8")
+        if cname and cname.strip():
+            (stage_dir / "CNAME").write_text(f"{cname.strip()}\n", encoding="utf-8")
 
         subprocess.run([git_exe, "init"], cwd=str(stage_dir), check=True)
         subprocess.run([git_exe, "checkout", "--orphan", branch], cwd=str(stage_dir), check=True)
@@ -501,6 +504,12 @@ def main() -> None:
         help="Target Git branch name for --publish orphan push (default: gh-pages).",
     )
     parser.add_argument(
+        "--publish-cname",
+        type=str,
+        default=os.environ.get("MLS_OER_DATA_CNAME", "data-educators.mlsascp.prof"),
+        help="Custom domain written to CNAME on --publish (pass empty string to omit).",
+    )
+    parser.add_argument(
         "--allow-sample-publish",
         action="store_true",
         help="Explicitly allow publishing a 2-topic --sample build.",
@@ -549,6 +558,7 @@ def main() -> None:
                 args.data_dir,
                 repo_url=publish_repo,
                 branch=args.publish_branch,
+                cname=args.publish_cname,
             )
             sys.exit(0)
         except Exception as exc:

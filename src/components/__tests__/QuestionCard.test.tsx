@@ -41,51 +41,238 @@ const SAMPLE_QUESTION: QuestionRecord = {
   sourceFiles: ['BB/BB_01/BB_01-Blood-Products_MC_AN.md'],
 };
 
-describe('QuestionCard', () => {
-  it('hides rationales, hint, and difficulty rationale until Educator Reveal is clicked', async () => {
-    const user = userEvent.setup();
-    const onInspect = vi.fn();
+const VARIANT_QUESTION: QuestionRecord = {
+  ...SAMPLE_QUESTION,
+  id: 'q_111222333444',
+  displayId: 'BB_01-AN-0002',
+  difficulty: 7,
+  questionText: 'A conditioned cyclist has a resting pulse of 44 bpm and feels well. What is the next step?',
+};
 
-    render(
+describe('QuestionCard', () => {
+  it('renders header bloom/difficulty, removes metadata aside, and switches variants with slide direction', async () => {
+    const user = userEvent.setup();
+    const onLoadVariants = vi.fn().mockResolvedValue([VARIANT_QUESTION]);
+
+    const { container } = render(
       <QuestionCard
         question={SAMPLE_QUESTION}
-        globalReveal={false}
-        onInspect={onInspect}
+        globalReveal={true}
+        onLoadVariants={onLoadVariants}
       />,
     );
 
+    expect(screen.getByText(/BLOOM: Analyze \| DIFFICULTY: 6 \/ 10/)).toBeInTheDocument();
     expect(screen.getByText(/An asymptomatic marathon runner/)).toBeInTheDocument();
     expect(screen.getByText('Qualify upon medical director approval')).toBeInTheDocument();
-    expect(screen.queryByText(/Conditioned athletes with pulse <50 bpm/)).not.toBeInTheDocument();
-    expect(screen.queryByText(/Consider high vagal tone/)).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Suggest\/Discuss/i })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Metadata/i })).not.toBeInTheDocument();
+    expect(container.querySelector('aside')).not.toBeInTheDocument();
 
-    await user.click(screen.getByRole('button', { name: /Reveal Answer & Rationales/i }));
+    const variantBtn = screen.getByRole('button', { name: /Variants\/Remix \(2\)/i });
+    await user.click(variantBtn);
 
-    expect(screen.getByText(/Conditioned athletes with pulse <50 bpm/)).toBeInTheDocument();
-    expect(screen.getByText(/Consider high vagal tone/)).toBeInTheDocument();
-    expect(screen.getByText(/Requires correlating athletic physiology/)).toBeInTheDocument();
+    expect(onLoadVariants).toHaveBeenCalledWith(SAMPLE_QUESTION);
+    const v2Btn = await screen.findByRole('button', { name: 'V2' });
+    expect(v2Btn).not.toBeDisabled();
+    expect(screen.getByRole('button', { name: /\+ Remix/i })).toBeInTheDocument();
 
-    await user.click(screen.getByRole('button', { name: /Inspect Details/i }));
-    expect(onInspect).toHaveBeenCalledWith(SAMPLE_QUESTION);
+    await user.click(v2Btn);
+    expect(screen.getByText(/A conditioned cyclist/)).toBeInTheDocument();
+    expect(screen.getByText(/BLOOM: Analyze \| DIFFICULTY: 7 \/ 10/)).toBeInTheDocument();
+    expect(container.querySelector('.animate-slide-in-right')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'V1' }));
+    expect(screen.getByText(/An asymptomatic marathon runner/)).toBeInTheDocument();
+    expect(container.querySelector('.animate-slide-in-left')).toBeInTheDocument();
   });
 
-  it('synchronizes local reveal state with globalReveal', () => {
+  it('keeps correct radial visible when feedback is hidden, toggles per-card feedback, and syncs with globalReveal', async () => {
+    const user = userEvent.setup();
     const { rerender } = render(
       <QuestionCard
         question={SAMPLE_QUESTION}
         globalReveal={false}
-        onInspect={vi.fn()}
       />,
     );
+
+    expect(screen.getByLabelText('Correct answer')).toBeInTheDocument();
+    expect(screen.queryByText(/Conditioned athletes with pulse <50 bpm/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Evaluate asymptomatic bradycardia in conditioned donors\./)).not.toBeInTheDocument();
     expect(screen.queryByText(/Consider high vagal tone/)).not.toBeInTheDocument();
+
+    const feedbackBtn = screen.getByRole('button', { name: /Show feedback/i });
+    await user.click(feedbackBtn);
+
+    expect(screen.getByText(/Conditioned athletes with pulse <50 bpm/)).toBeInTheDocument();
+    expect(screen.getByText(/Evaluate asymptomatic bradycardia in conditioned donors\./)).toBeInTheDocument();
+    expect(screen.getByText(/Consider high vagal tone/)).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /Hide feedback/i }));
+    expect(screen.queryByText(/Evaluate asymptomatic bradycardia in conditioned donors\./)).not.toBeInTheDocument();
 
     rerender(
       <QuestionCard
         question={SAMPLE_QUESTION}
         globalReveal={true}
-        onInspect={vi.fn()}
       />,
     );
     expect(screen.getByText(/Consider high vagal tone/)).toBeInTheDocument();
+    expect(screen.getByText(/Evaluate asymptomatic bradycardia in conditioned donors\./)).toBeInTheDocument();
+  });
+
+  it('keeps Variants/Remix clickable when similarIds is empty, shows R1 for local remixes, and triggers onOpenRemix', async () => {
+    const user = userEvent.setup();
+    const onOpenRemix = vi.fn();
+    const soloQuestion: QuestionRecord = { ...SAMPLE_QUESTION, similarIds: [] };
+    const localRemixRecord = {
+      id: 'remix_1',
+      parentQuestionId: soloQuestion.id,
+      remixedFromId: soloQuestion.id,
+      createdAt: '2026-11-22T12:00:00Z',
+      updatedAt: '2026-11-22T12:00:00Z',
+      question: {
+        ...soloQuestion,
+        id: 'remix_1',
+        displayId: 'BB_01-AN-0001-REMIX',
+        questionText: 'Remixed donor bradycardia stem for local quiz.',
+      },
+    };
+
+    render(
+      <QuestionCard
+        question={soloQuestion}
+        globalReveal={false}
+        localRemixes={[localRemixRecord]}
+        onOpenRemix={onOpenRemix}
+      />,
+    );
+
+    const variantBtn = screen.getByRole('button', { name: /Variants\/Remix \(2\)/i });
+    expect(variantBtn).not.toBeDisabled();
+    await user.click(variantBtn);
+
+    const r1Btn = screen.getByRole('button', { name: 'R1' });
+    await user.click(r1Btn);
+    expect(screen.getByText(/Remixed donor bradycardia stem for local quiz\./)).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /\+ Remix/i }));
+    expect(onOpenRemix).toHaveBeenCalledWith(localRemixRecord.question, soloQuestion.id);
+  });
+
+  it('shows trash icon and removes from active quiz when In [Quiz] button is clicked', async () => {
+    const user = userEvent.setup();
+    const onRemoveFromQuiz = vi.fn();
+    const activeQuiz = {
+      id: 'quiz_1',
+      name: 'Midterm 1',
+      description: '',
+      questionIds: [SAMPLE_QUESTION.id],
+      customPoints: {},
+      createdAt: '2026-11-22T12:00:00Z',
+      updatedAt: '2026-11-22T12:00:00Z',
+    };
+
+    render(
+      <QuestionCard
+        question={SAMPLE_QUESTION}
+        globalReveal={false}
+        quizzes={[activeQuiz]}
+        activeQuizId="quiz_1"
+        onRemoveFromQuiz={onRemoveFromQuiz}
+      />,
+    );
+
+    const removeBtn = screen.getByRole('button', {
+      name: /Remove BB_01-AN-0001 from Midterm 1/i,
+    });
+    expect(removeBtn).not.toBeDisabled();
+    expect(removeBtn).toHaveTextContent('In Use');
+    expect(removeBtn.querySelectorAll('svg')).toHaveLength(2);
+    expect(screen.getByText(/Added to/i)).toHaveTextContent('Added to Midterm 1');
+
+    await user.click(removeBtn);
+    expect(onRemoveFromQuiz).toHaveBeenCalledWith('quiz_1', SAMPLE_QUESTION.id);
+  });
+
+  it('shows Add to Quiz when not in the active quiz', () => {
+    const activeQuiz = {
+      id: 'quiz_1',
+      name: 'Midterm 1',
+      description: '',
+      questionIds: [],
+      customPoints: {},
+      createdAt: '2026-11-22T12:00:00Z',
+      updatedAt: '2026-11-22T12:00:00Z',
+    };
+
+    render(
+      <QuestionCard
+        question={SAMPLE_QUESTION}
+        globalReveal={false}
+        quizzes={[activeQuiz]}
+        activeQuizId="quiz_1"
+      />,
+    );
+
+    expect(screen.getByRole('button', { name: /Add to Quiz/i })).toBeInTheDocument();
+    expect(screen.queryByText(/Added to/i)).not.toBeInTheDocument();
+  });
+
+  it('applies focus emphasis when isFocused is true and dims when isFocused is false', () => {
+    const { container, rerender } = render(
+      <QuestionCard question={SAMPLE_QUESTION} globalReveal={false} isFocused={true} />,
+    );
+
+    const focusedCard = container.querySelector('[data-focused="true"]');
+    expect(focusedCard).not.toBeNull();
+    expect(focusedCard?.className).toContain('ring-2');
+    expect(focusedCard?.className).toContain('shadow-md');
+
+    rerender(<QuestionCard question={SAMPLE_QUESTION} globalReveal={false} isFocused={false} />);
+
+    const dimmedCard = container.querySelector('[data-focused="false"]');
+    expect(dimmedCard).not.toBeNull();
+    expect(dimmedCard?.className).toContain('opacity-65');
+  });
+
+  it('shows Reveal All when feedback is visible and toggles global reveal', async () => {
+    const user = userEvent.setup();
+    const onToggleGlobalReveal = vi.fn();
+    const { rerender } = render(
+      <QuestionCard
+        question={SAMPLE_QUESTION}
+        globalReveal={false}
+        onToggleGlobalReveal={onToggleGlobalReveal}
+      />,
+    );
+
+    expect(
+      screen.queryByRole('button', { name: /Reveal feedback for all questions/i }),
+    ).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /Show feedback/i }));
+
+    const revealAllBtn = screen.getByRole('button', {
+      name: /Reveal feedback for all questions/i,
+    });
+    expect(revealAllBtn).toBeInTheDocument();
+    await user.click(revealAllBtn);
+    expect(onToggleGlobalReveal).toHaveBeenCalledTimes(1);
+
+    rerender(
+      <QuestionCard
+        question={SAMPLE_QUESTION}
+        globalReveal={true}
+        onToggleGlobalReveal={onToggleGlobalReveal}
+      />,
+    );
+
+    const hideAllBtn = screen.getByRole('button', {
+      name: /Hide feedback for all questions/i,
+    });
+    expect(hideAllBtn).toBeInTheDocument();
+    await user.click(hideAllBtn);
+    expect(onToggleGlobalReveal).toHaveBeenCalledTimes(2);
   });
 });

@@ -176,14 +176,14 @@ export function PreBuiltQuizzesView({
       <div className="w-full shrink-0 space-y-3 lg:w-96">
         <Card className="p-4 space-y-3">
           <div className="flex items-center justify-between">
-            <h2 className="flex items-center gap-2 text-sm font-bold text-slate-900">
-              <Layers className="h-4 w-4 text-emerald-600" />
+            <h2 className="flex items-center gap-2 text-sm font-bold text-[var(--text-primary)]">
+              <Layers className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
               Pre-Built Quizzes Catalog
             </h2>
             <Badge variant="accent">{catalog.length}</Badge>
           </div>
           <div className="relative">
-            <Search className="pointer-events-none absolute left-2.5 top-2.5 h-4 w-4 text-slate-400" />
+            <Search className="pointer-events-none absolute left-2.5 top-2.5 h-4 w-4 text-[var(--text-secondary)]" />
             <Input
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
@@ -200,23 +200,23 @@ export function PreBuiltQuizzesView({
             className={cn(
               'w-full rounded-xl border p-3.5 text-left transition cursor-pointer',
               selectedId === '__shared_link__'
-                ? 'border-indigo-600 bg-indigo-50/70 ring-1 ring-indigo-600'
-                : 'border-indigo-200 bg-white hover:border-indigo-400',
+                ? 'border-[var(--cream-border)] bg-[var(--cream-surface)] ring-1 ring-[var(--cream-border)]'
+                : 'border-indigo-200 dark:border-indigo-800 bg-[var(--bg-surface)] hover:border-indigo-400',
             )}
           >
             <div className="flex items-center justify-between gap-2">
               <Badge variant="accent" className="text-[10px]">
                 Shared Link
               </Badge>
-              <span className="text-xs font-mono text-slate-600">
+              <span className="text-xs font-mono text-[var(--text-secondary)]">
                 {sharedPayload.questionIds.length} Qs
               </span>
             </div>
-            <h3 className="mt-1.5 text-sm font-bold text-slate-900">
+            <h3 className="mt-1.5 text-sm font-bold text-[var(--text-primary)]">
               {sharedPayload.title}
             </h3>
             {sharedPayload.author && (
-              <p className="text-xs text-slate-500">By {sharedPayload.author}</p>
+              <p className="text-xs text-[var(--text-secondary)]">By {sharedPayload.author}</p>
             )}
           </button>
         )}
@@ -238,22 +238,22 @@ export function PreBuiltQuizzesView({
                   className={cn(
                     'w-full rounded-xl border p-3.5 text-left transition cursor-pointer',
                     active
-                      ? 'border-indigo-600 bg-indigo-50/60 ring-1 ring-indigo-600'
-                      : 'border-slate-200 bg-white hover:border-slate-300',
+                      ? 'border-[var(--cream-border)] bg-[var(--cream-surface)] ring-1 ring-[var(--cream-border)]'
+                      : 'border-[var(--border-color)] bg-[var(--bg-surface)] hover:bg-[var(--cream-surface-soft)]',
                   )}
                 >
                   <div className="flex items-center justify-between gap-2">
-                    <span className="font-mono text-[11px] font-semibold text-indigo-700">
+                    <span className="font-mono text-[11px] font-semibold text-indigo-700 dark:text-indigo-400">
                       {item.subsetKey || item.id}
                     </span>
                     <Badge variant="outline" className="text-[10px]">
                       {item.questionCount} Qs • Diff {item.avgDifficulty}
                     </Badge>
                   </div>
-                  <h3 className="mt-1 text-sm font-semibold text-slate-900">
+                  <h3 className="mt-1 text-sm font-semibold text-[var(--text-primary)]">
                     {item.title}
                   </h3>
-                  <p className="mt-0.5 text-xs text-slate-500 line-clamp-2">
+                  <p className="mt-0.5 text-xs text-[var(--text-secondary)] line-clamp-2">
                     {item.description}
                   </p>
                 </button>
@@ -266,7 +266,7 @@ export function PreBuiltQuizzesView({
       {/* Right Preview, Use As-Is Export & Clone/Remix */}
       <div className="min-w-0 flex-1 space-y-4">
         {!activeEntry ? (
-          <Card className="p-10 text-center text-sm text-slate-500">
+          <Card className="p-10 text-center text-sm text-[var(--text-secondary)]">
             Select a Pre-Built quiz from the catalog to preview, export directly, practice,
             or clone &amp; remix.
           </Card>
@@ -276,19 +276,19 @@ export function PreBuiltQuizzesView({
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div className="space-y-1">
                   <div className="flex flex-wrap items-center gap-2">
-                    <h2 className="text-lg font-bold text-slate-900">
+                    <h2 className="text-lg font-bold text-[var(--text-primary)]">
                       {activeEntry.title}
                     </h2>
                     <Badge variant="accent" className="font-mono text-[11px]">
                       {activeEntry.license}
                     </Badge>
                   </div>
-                  <p className="text-xs text-slate-600">
+                  <p className="text-xs text-[var(--text-secondary)]">
                     {activeEntry.author || 'MLS OER Contributor'}
                     {activeEntry.institution ? ` • ${activeEntry.institution}` : ''}
                   </p>
                   {activeEntry.description && (
-                    <p className="text-sm text-slate-700 pt-1">{activeEntry.description}</p>
+                    <p className="text-sm text-[var(--text-primary)] pt-1">{activeEntry.description}</p>
                   )}
                 </div>
 
@@ -318,7 +318,7 @@ export function PreBuiltQuizzesView({
                 </div>
               </div>
 
-              <div className="flex flex-wrap gap-2 pt-2 border-t border-slate-100">
+              <div className="flex flex-wrap gap-2 pt-2 border-t border-[var(--border-color)]">
                 <Button
                   variant="ghost"
                   size="sm"
@@ -356,7 +356,7 @@ export function PreBuiltQuizzesView({
                 <div className="grid gap-4 xl:grid-cols-2">
                   <BlueprintBalanceMeter questions={loadedQuestions} manifest={manifest} />
                   <Card className="p-4 space-y-3">
-                    <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+                    <h3 className="text-xs font-semibold uppercase tracking-wider text-[var(--text-secondary)]">
                       Use As-Is — Export Pre-Built Quiz ({loadedQuestions.length} Qs)
                     </h3>
                     <QuizExportButtons
@@ -369,15 +369,15 @@ export function PreBuiltQuizzesView({
                 </div>
 
                 <Card className="p-4 space-y-3">
-                  <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+                  <h3 className="text-xs font-semibold uppercase tracking-wider text-[var(--text-secondary)]">
                     Question Preview (Showing {Math.min(25, loadedQuestions.length)} of{' '}
                     {loadedQuestions.length})
                   </h3>
-                  <div className="divide-y divide-slate-100">
+                  <div className="divide-y divide-[var(--border-color)]">
                     {loadedQuestions.slice(0, 25).map((q, idx) => (
                       <div key={q.id} className="py-3 space-y-1">
                         <div className="flex flex-wrap items-center gap-1.5">
-                          <span className="font-mono text-xs font-bold text-slate-500">
+                          <span className="font-mono text-xs font-bold text-[var(--text-secondary)]">
                             {idx + 1}.
                           </span>
                           <Badge
@@ -399,11 +399,11 @@ export function PreBuiltQuizzesView({
                           >
                             {q.bloomLevel}
                           </Badge>
-                          <span className="text-[11px] text-slate-500 truncate">
+                          <span className="text-[11px] text-[var(--text-secondary)] truncate">
                             {q.ascpPath}
                           </span>
                         </div>
-                        <p className="text-sm text-slate-800">{q.questionText}</p>
+                        <p className="text-sm text-[var(--text-primary)]">{q.questionText}</p>
                       </div>
                     ))}
                   </div>

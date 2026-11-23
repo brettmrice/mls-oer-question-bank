@@ -5,7 +5,9 @@ import duckdb_wasm_eh from '@duckdb/duckdb-wasm/dist/duckdb-eh.wasm?url';
 import eh_worker from '@duckdb/duckdb-wasm/dist/duckdb-browser-eh.worker.js?url';
 
 import { getAssetUrl } from '@/config/dataSource';
+import { getRemixedQuestionsByIds } from '@/lib/remixStore';
 import {
+  buildAscpPathFacetQuery,
   buildFacetQuery,
   buildQuestionQuery,
   buildSemanticCandidateQueries,
@@ -14,6 +16,7 @@ import {
   selectTargetShards,
 } from '@/lib/queryBuilder';
 import type {
+  AscpPathFacet,
   FilterState,
   ManifestData,
   QuestionOption,
@@ -179,12 +182,45 @@ export async function querySubtopicFacets(
   });
 }
 
+export async function queryAscpPathFacets(
+  shards: ShardManifest[],
+  filters: FilterState,
+): Promise<AscpPathFacet[]> {
+  if (shards.length === 0) {
+    return [];
+  }
+  const { db, conn } = await getDuckDB();
+  await ensureShardsRegistered(db, shards);
+
+  const sql = buildAscpPathFacetQuery(
+    shards.map((s) => s.parquet.path),
+    filters,
+  );
+  const table = await conn.query(sql);
+  return table.toArray().map((r) => {
+    const obj = r.toJSON() as Record<string, unknown>;
+    return {
+      topicCode: String(obj.topic_code ?? ''),
+      ascpPath: String(obj.ascp_path ?? ''),
+      count: Number(obj.cnt ?? 0),
+    };
+  });
+}
+
 export async function fetchQuestionsByIds(
   manifest: ManifestData,
   ids: string[],
   candidateShards?: ShardManifest[],
 ): Promise<QuestionRecord[]> {
   if (ids.length === 0) return [];
+
+  const localRemixes = await getRemixedQuestionsByIds(ids);
+  const foundMap = new Map<string, QuestionRecord>(localRemixes.map((q) => [q.id, q]));
+  const remainingFromBank = ids.filter((id) => !foundMap.has(id));
+  if (remainingFromBank.length === 0) {
+    return ids.map((id) => foundMap.get(id)).filter((q): q is QuestionRecord => q !== undefined);
+  }
+
   const { db, conn } = await getDuckDB();
 
   const searchShards =
@@ -208,11 +244,13 @@ export async function fetchQuestionsByIds(
     return res.toArray().map((r) => mapRowToQuestion(r.toJSON() as Record<string, unknown>));
   };
 
-  const found = await queryBatch(searchShards, ids);
-  const foundMap = new Map(found.map((q) => [q.id, q]));
+  const found = await queryBatch(searchShards, remainingFromBank);
+  for (const q of found) {
+    foundMap.set(q.id, q);
+  }
 
   // If any requested sibling IDs live in another topic shard, scan remaining shards
-  const missingIds = ids.filter((id) => !foundMap.has(id));
+  const missingIds = remainingFromBank.filter((id) => !foundMap.has(id));
   if (missingIds.length > 0 && candidateShards && candidateShards.length < manifest.shards.length) {
     const searchedSet = new Set(searchShards.map((s) => s.shardId));
     const restShards = manifest.shards.filter((s) => !searchedSet.has(s.shardId));

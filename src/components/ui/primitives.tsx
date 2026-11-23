@@ -16,12 +16,13 @@ export function Button({
 }: ButtonProps): React.ReactElement {
   const variants: Record<NonNullable<ButtonProps['variant']>, string> = {
     primary:
-      'bg-indigo-600 text-white hover:bg-indigo-700 border border-indigo-600 shadow-xs disabled:opacity-50',
+      'bg-indigo-600 text-white hover:bg-indigo-700 border border-indigo-600 dark:bg-indigo-500 dark:hover:bg-indigo-600 dark:border-indigo-500 shadow-xs disabled:opacity-50',
     secondary:
-      'bg-slate-100 text-slate-800 hover:bg-slate-200 border border-slate-200 disabled:opacity-50',
+      'bg-[var(--bg-primary)] text-[var(--text-primary)] hover:bg-[var(--cream-surface-soft)] border border-[var(--border-color)] disabled:opacity-50',
     outline:
-      'bg-white text-slate-700 hover:bg-slate-50 border border-slate-300 shadow-2xs disabled:opacity-50',
-    ghost: 'bg-transparent text-slate-600 hover:bg-slate-100 hover:text-slate-900 border border-transparent disabled:opacity-50',
+      'bg-[var(--bg-surface)] text-[var(--text-primary)] hover:bg-[var(--cream-surface-soft)] border border-[var(--border-color)] shadow-2xs disabled:opacity-50',
+    ghost:
+      'bg-transparent text-[var(--text-secondary)] hover:bg-[var(--cream-surface-soft)] hover:text-[var(--text-primary)] border border-transparent disabled:opacity-50',
   };
   const sizes: Record<NonNullable<ButtonProps['size']>, string> = {
     sm: 'h-8 px-2.5 text-xs rounded-md',
@@ -52,9 +53,9 @@ export function Badge({
   ...props
 }: BadgeProps): React.ReactElement {
   const variants: Record<NonNullable<BadgeProps['variant']>, string> = {
-    default: 'bg-slate-100 text-slate-700 border border-slate-200',
-    outline: 'bg-white text-slate-600 border border-slate-300',
-    accent: 'bg-indigo-50 text-indigo-700 border border-indigo-200',
+    default: 'bg-[var(--bg-primary)] text-[var(--text-secondary)] border border-[var(--border-color)]',
+    outline: 'bg-[var(--bg-surface)] text-[var(--text-secondary)] border border-[var(--border-color)]',
+    accent: 'bg-indigo-50 text-indigo-700 border border-indigo-200 dark:bg-indigo-950/60 dark:text-indigo-300 dark:border-indigo-800',
   };
   return (
     <span
@@ -75,7 +76,7 @@ export function Card({
   return (
     <div
       className={cn(
-        'rounded-xl border border-slate-200 bg-white shadow-2xs',
+        'rounded-xl border border-[var(--border-color)] bg-[var(--bg-surface)] shadow-2xs',
         className,
       )}
       {...props}
@@ -90,7 +91,7 @@ export function Input({
   return (
     <input
       className={cn(
-        'h-9 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-900 placeholder:text-slate-400 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20',
+        'h-9 w-full rounded-lg border border-[var(--border-color)] bg-[var(--bg-surface)] px-3 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-secondary)]/70 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20',
         className,
       )}
       {...props}
@@ -99,11 +100,11 @@ export function Input({
 }
 
 export function Separator({ className }: { className?: string }): React.ReactElement {
-  return <div className={cn('h-px w-full bg-slate-200', className)} />;
+  return <div className={cn('h-px w-full bg-[var(--border-color)]', className)} />;
 }
 
 export function Skeleton({ className }: { className?: string }): React.ReactElement {
-  return <div className={cn('animate-pulse rounded-md bg-slate-200/80', className)} />;
+  return <div className={cn('animate-pulse rounded-md bg-slate-200/80 dark:bg-slate-700/60', className)} />;
 }
 
 export interface DrawerProps {
@@ -143,14 +144,14 @@ export function Drawer({
       />
       <div
         className={cn(
-          'relative z-10 flex h-full w-full flex-col bg-white shadow-2xl border-l border-slate-200',
+          'relative z-10 flex h-full w-full flex-col bg-[var(--bg-surface)] shadow-2xl border-l border-[var(--border-color)]',
           maxWidthClass,
         )}
       >
-        <div className="flex items-start justify-between gap-4 border-b border-slate-200 px-6 py-4">
+        <div className="flex items-start justify-between gap-4 border-b border-[var(--border-color)] px-6 py-4">
           <div className="min-w-0">
-            <h2 className="text-base font-semibold text-slate-900 truncate">{title}</h2>
-            {subtitle && <p className="mt-0.5 text-xs text-slate-500 truncate">{subtitle}</p>}
+            <h2 className="text-base font-semibold text-[var(--text-primary)] truncate">{title}</h2>
+            {subtitle && <p className="mt-0.5 text-xs text-[var(--text-secondary)] truncate">{subtitle}</p>}
           </div>
           <Button variant="ghost" size="icon" onClick={onClose} aria-label="Close drawer">
             <X className="h-4 w-4" />

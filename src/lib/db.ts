@@ -1,4 +1,5 @@
 import Dexie, { type Table } from 'dexie';
+import type { QuestionRecord } from '@/types/question';
 
 export interface DownloadedShardRecord {
   shardId: string;
@@ -41,11 +42,24 @@ export interface AppStateRecord {
   value: unknown;
 }
 
+export interface RemixedQuestionRecord {
+  id: string;
+  parentQuestionId: string;
+  remixedFromId: string;
+  createdAt: string;
+  updatedAt: string;
+  rationaleNote?: string;
+  submittedIssueUrl?: string;
+  submittedIssueNumber?: number;
+  question: QuestionRecord;
+}
+
 export class MlsOerDb extends Dexie {
   downloadedShards!: Table<DownloadedShardRecord, string>;
   quizzes!: Table<QuizWorkspaceRecord, string>;
   savedQuestions!: Table<SavedQuestionRecord, string>;
   appState!: Table<AppStateRecord, string>;
+  remixedQuestions!: Table<RemixedQuestionRecord, string>;
 
   constructor() {
     super('MlsOerQuestionBankDB');
@@ -54,6 +68,13 @@ export class MlsOerDb extends Dexie {
       quizzes: 'id, name, updatedAt',
       savedQuestions: 'questionId, bookmarkedAt',
       appState: 'key',
+    });
+    this.version(2).stores({
+      downloadedShards: 'shardId, topicCode, vecSha256, cachedAt',
+      quizzes: 'id, name, updatedAt',
+      savedQuestions: 'questionId, bookmarkedAt',
+      appState: 'key',
+      remixedQuestions: 'id, parentQuestionId, updatedAt',
     });
   }
 }

@@ -4,8 +4,6 @@ import {
   ChevronLeft,
   ChevronRight,
   Download,
-  Eye,
-  EyeOff,
   Plus,
   SlidersHorizontal,
   Sparkles,
@@ -16,18 +14,19 @@ import { FilterSidebar } from '@/components/FilterSidebar';
 import { Navbar } from '@/components/Navbar';
 import { PreBuiltQuizzesView } from '@/components/PreBuiltQuizzesView';
 import { QuestionCard } from '@/components/QuestionCard';
-import { QuestionDetailDrawer } from '@/components/QuestionDetailDrawer';
 import { QuestionErrataModal } from '@/components/QuestionErrataModal';
+import { QuestionRemixModal } from '@/components/QuestionRemixModal';
 import { QuizManagerDrawer } from '@/components/QuizManagerDrawer';
 import { SemanticSearchModal } from '@/components/SemanticSearchModal';
 import { StudentPracticeView } from '@/components/StudentPracticeView';
+import { OverflowBlurScrollArea } from '@/components/ui/OverflowBlurScrollArea';
 import { Badge, Button, Card, Skeleton } from '@/components/ui/primitives';
 import { getDataBaseUrl } from '@/config/dataSource';
-import type { QuizWorkspaceRecord } from '@/lib/db';
+import type { QuizWorkspaceRecord, RemixedQuestionRecord } from '@/lib/db';
 import {
   fetchQuestionsByIds,
+  queryAscpPathFacets,
   queryQuestions,
-  querySubtopicFacets,
 } from '@/lib/duckdb';
 import { fetchPrebuiltFromGist } from '@/lib/githubApi';
 import {
@@ -49,22 +48,44 @@ import {
   getBackupStatus,
   listQuizzes,
   listSavedQuestions,
+  removeQuestionFromQuiz,
   setActiveQuizId as persistActiveQuizId,
   toggleSavedQuestion,
   type BackupStatus,
 } from '@/lib/quizStore';
+import { deleteRemixedQuestion, listAllRemixes } from '@/lib/remixStore';
 import { runHybridSemanticSearch } from '@/lib/semanticClient';
 import { formatBytes } from '@/lib/utils';
 import {
   DEFAULT_FILTERS,
+  type AscpPathFacet,
   type FilterState,
   type ManifestData,
   type QuestionRecord,
   type SortOption,
-  type SubtopicFacet,
 } from '@/types/question';
 
 export function App(): React.ReactElement {
+  const [theme, setTheme] = useState<'light' | 'dark'>(() => {
+    if (typeof document !== 'undefined') {
+      return document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light';
+    }
+    return 'light';
+  });
+
+  const toggleTheme = useCallback(() => {
+    setTheme((prev) => {
+      const next = prev === 'dark' ? 'light' : 'dark';
+      document.documentElement.setAttribute('data-theme', next);
+      try {
+        localStorage.setItem('oer_theme', next);
+      } catch {
+        // Ignore storage errors in restricted contexts
+      }
+      return next;
+    });
+  }, []);
+
   const [manifest, setManifest] = useState<ManifestData | null>(null);
   const [manifestError, setManifestError] = useState<string | null>(null);
 
@@ -104,7 +125,8 @@ export function App(): React.ReactElement {
   const [loading, setLoading] = useState<boolean>(true);
   const [queryError, setQueryError] = useState<string | null>(null);
 
-  const [subtopicFacets, setSubtopicFacets] = useState<SubtopicFacet[]>([]);
+  const [ascpPathFacets, setAscpPathFacets] = useState<AscpPathFacet[]>([]);
+  const [requestedTopicCodes, setRequestedTopicCodes] = useState<string[]>([]);
   const [facetsLoading, setFacetsLoading] = useState<boolean>(false);
 
   // Phase 3: Consent-gated multi-shard hybrid semantic search state
@@ -124,23 +146,31 @@ export function App(): React.ReactElement {
   const [semanticError, setSemanticError] = useState<string | null>(null);
 
   const [globalReveal, setGlobalReveal] = useState<boolean>(false);
-  const [inspectedQuestion, setInspectedQuestion] = useState<QuestionRecord | null>(null);
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState<boolean>(false);
-  const [notice, setNotice] = useState<string | null>(null);
+  const [remixesByParent, setRemixesByParent] = useState<Record<string, RemixedQuestionRecord[]>>({});
+  const [remixModalState, setRemixModalState] = useState<{
+    sourceQuestion: QuestionRecord;
+    parentQuestionId: string;
+    editingRemix?: RemixedQuestionRecord;
+  } | null>(null);
 
   const querySeqRef = useRef(0);
   const facetSeqRef = useRef(0);
   const semanticSeqRef = useRef(0);
+  const questionListRef = useRef<HTMLDivElement>(null);
+  const questionCardRefs = useRef<Map<string, HTMLDivElement>>(new Map());
+  const [focusedQuestionId, setFocusedQuestionId] = useState<string | null>(null);
 
   const isSemanticActive =
     semanticPrompt.trim().length > 0 && activeSemanticShards.length > 0;
 
   const refreshWorkspace = useCallback(async (preferredActiveId?: string | null) => {
-    const [quizList, storedActive, savedList, status] = await Promise.all([
+    const [quizList, storedActive, savedList, status, allRemixes] = await Promise.all([
       listQuizzes(),
       getActiveQuizId(),
       listSavedQuestions(),
       getBackupStatus(),
+      listAllRemixes(),
     ]);
     setQuizzes(quizList);
     const resolvedActive =
@@ -152,6 +182,15 @@ export function App(): React.ReactElement {
     setActiveQuizId(resolvedActive);
     setBookmarkedIds(new Set(savedList.map((s) => s.questionId)));
     setBackupStatus(status);
+
+    const grouped: Record<string, RemixedQuestionRecord[]> = {};
+    for (const rec of allRemixes) {
+      if (!grouped[rec.parentQuestionId]) {
+        grouped[rec.parentQuestionId] = [];
+      }
+      grouped[rec.parentQuestionId].push(rec);
+    }
+    setRemixesByParent(grouped);
   }, []);
 
   useEffect(() => {
@@ -178,9 +217,7 @@ export function App(): React.ReactElement {
     };
   }, []);
 
-  const showNotice = useCallback((msg: string) => {
-    setNotice(msg);
-  }, []);
+  const showNotice = useCallback((_msg: string) => {}, []);
 
   useEffect(() => {
     let active = true;
@@ -302,6 +339,7 @@ export function App(): React.ReactElement {
       JSON.stringify({
         subtopics: filters.subtopics,
         leafTopics: filters.leafTopics,
+        ascpPaths: filters.ascpPaths,
         bloomLevels: filters.bloomLevels,
         difficultyMin: filters.difficultyMin,
         difficultyMax: filters.difficultyMax,
@@ -337,11 +375,27 @@ export function App(): React.ReactElement {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [manifest, semanticPrompt, activeSemanticShards, semanticFilterKey]);
 
+  const ensureTopicFacets = useCallback((codes: string[]) => {
+    setRequestedTopicCodes((prev) => {
+      const next = new Set(prev);
+      let changed = false;
+      for (const c of codes) {
+        if (c && !next.has(c)) {
+          next.add(c);
+          changed = true;
+        }
+      }
+      return changed ? Array.from(next) : prev;
+    });
+  }, []);
+
   const facetKey = useMemo(
     () =>
       JSON.stringify({
+        requestedTopicCodes,
         disciplines: filters.disciplines,
         topicCodes: filters.topicCodes,
+        ascpPaths: filters.ascpPaths,
         bloomLevels: filters.bloomLevels,
         difficultyMin: filters.difficultyMin,
         difficultyMax: filters.difficultyMax,
@@ -349,27 +403,38 @@ export function App(): React.ReactElement {
         questionTypes: filters.questionTypes,
         keyword: filters.keyword,
       }),
-    [filters],
+    [filters, requestedTopicCodes],
   );
 
   useEffect(() => {
     if (!manifest) return;
-    if (filters.disciplines.length === 0 && filters.topicCodes.length === 0) {
-      setSubtopicFacets([]);
+    const requestedSet = new Set(requestedTopicCodes);
+    const activeShards =
+      filters.disciplines.length > 0 ||
+      filters.topicCodes.length > 0 ||
+      filters.ascpPaths.length > 0
+        ? selectTargetShards(manifest, filters)
+        : [];
+    for (const s of activeShards) {
+      requestedSet.add(s.topicCode);
+    }
+    const targetShards = manifest.shards.filter((s) => requestedSet.has(s.topicCode));
+    if (targetShards.length === 0) {
+      setAscpPathFacets([]);
       setFacetsLoading(false);
       return;
     }
     const seq = ++facetSeqRef.current;
     setFacetsLoading(true);
-    querySubtopicFacets(manifest, filters)
+    queryAscpPathFacets(targetShards, filters)
       .then((facets) => {
         if (seq !== facetSeqRef.current) return;
-        setSubtopicFacets(facets);
+        setAscpPathFacets(facets);
         setFacetsLoading(false);
       })
       .catch(() => {
         if (seq !== facetSeqRef.current) return;
-        setSubtopicFacets([]);
+        setAscpPathFacets([]);
         setFacetsLoading(false);
       });
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -422,6 +487,16 @@ export function App(): React.ReactElement {
     [quizzes, refreshWorkspace, showNotice],
   );
 
+  const handleRemoveFromQuiz = useCallback(
+    async (quizId: string, questionId: string) => {
+      const target = quizzes.find((q) => q.id === quizId);
+      await removeQuestionFromQuiz(quizId, questionId);
+      await refreshWorkspace(quizId);
+      showNotice(`Removed question from "${target?.name ?? 'Quiz'}".`);
+    },
+    [quizzes, refreshWorkspace, showNotice],
+  );
+
   const handleQuickCreateAndAdd = useCallback(
     async (questionId: string) => {
       const created = await createQuiz('My Quiz 1', '', {
@@ -445,95 +520,6 @@ export function App(): React.ReactElement {
     [refreshWorkspace, showNotice],
   );
 
-  const activeFilterChips = useMemo(() => {
-    const chips: Array<{ key: string; label: string; onRemove: () => void }> = [];
-    for (const d of filters.disciplines) {
-      chips.push({
-        key: `disc:${d}`,
-        label: `Discipline: ${d}`,
-        onRemove: () =>
-          updateFilters({
-            disciplines: filters.disciplines.filter((x) => x !== d),
-            subtopics: [],
-            leafTopics: [],
-            page: 1,
-          }),
-      });
-    }
-    for (const t of filters.topicCodes) {
-      chips.push({
-        key: `topic:${t}`,
-        label: `Topic: ${t}`,
-        onRemove: () =>
-          updateFilters({
-            topicCodes: filters.topicCodes.filter((x) => x !== t),
-            subtopics: [],
-            leafTopics: [],
-            page: 1,
-          }),
-      });
-    }
-    for (const s of filters.subtopics) {
-      chips.push({
-        key: `sub:${s}`,
-        label: `Subtopic: ${s}`,
-        onRemove: () =>
-          updateFilters({
-            subtopics: filters.subtopics.filter((x) => x !== s),
-            page: 1,
-          }),
-      });
-    }
-    for (const l of filters.leafTopics) {
-      chips.push({
-        key: `leaf:${l}`,
-        label: `Leaf: ${l}`,
-        onRemove: () =>
-          updateFilters({
-            leafTopics: filters.leafTopics.filter((x) => x !== l),
-            page: 1,
-          }),
-      });
-    }
-    for (const b of filters.bloomLevels) {
-      chips.push({
-        key: `bloom:${b}`,
-        label: `Bloom: ${b}`,
-        onRemove: () =>
-          updateFilters({
-            bloomLevels: filters.bloomLevels.filter((x) => x !== b),
-            page: 1,
-          }),
-      });
-    }
-    if (filters.difficultyMin > 1 || filters.difficultyMax < 10) {
-      chips.push({
-        key: 'diff',
-        label: `Difficulty: ${filters.difficultyMin}–${filters.difficultyMax}`,
-        onRemove: () => updateFilters({ difficultyMin: 1, difficultyMax: 10, page: 1 }),
-      });
-    }
-    for (const st of filters.subsetTags) {
-      chips.push({
-        key: `subset:${st}`,
-        label: `Subset: ${st}`,
-        onRemove: () =>
-          updateFilters({
-            subsetTags: filters.subsetTags.filter((x) => x !== st),
-            page: 1,
-          }),
-      });
-    }
-    if (!isSemanticActive && filters.keyword.trim()) {
-      chips.push({
-        key: 'kw',
-        label: `Keyword: "${filters.keyword.trim()}"`,
-        onRemove: () => updateFilters({ keyword: '', page: 1 }),
-      });
-    }
-    return chips;
-  }, [filters, isSemanticActive, updateFilters]);
-
   const displayedTotal = isSemanticActive ? semanticResults.length : totalCount;
   const displayedItems = useMemo(() => {
     if (isSemanticActive) {
@@ -551,6 +537,99 @@ export function App(): React.ReactElement {
       semanticMatch: undefined,
     }));
   }, [isSemanticActive, semanticResults, questions, filters.page, filters.pageSize]);
+
+  useEffect(() => {
+    if (displayedItems.length === 0) {
+      setFocusedQuestionId(null);
+      return;
+    }
+    if (displayedItems.length === 1) {
+      setFocusedQuestionId(displayedItems[0].question.id);
+      return;
+    }
+
+    const container = questionListRef.current;
+    if (!container) {
+      setFocusedQuestionId(displayedItems[0].question.id);
+      return;
+    }
+
+    const computeFocusedQuestion = () => {
+      const { scrollTop, clientHeight, scrollHeight } = container;
+      if (scrollHeight > clientHeight) {
+        if (scrollTop <= 2) {
+          setFocusedQuestionId((prev) =>
+            prev === displayedItems[0].question.id ? prev : displayedItems[0].question.id,
+          );
+          return;
+        }
+        if (scrollTop + clientHeight >= scrollHeight - 2) {
+          const lastId = displayedItems[displayedItems.length - 1].question.id;
+          setFocusedQuestionId((prev) => (prev === lastId ? prev : lastId));
+          return;
+        }
+      }
+
+      const containerRect = container.getBoundingClientRect();
+      const containerCenter = (containerRect.top + containerRect.bottom) / 2;
+
+      let bestId = displayedItems[0].question.id;
+      let bestVisible = -1;
+      let bestDistance = Number.POSITIVE_INFINITY;
+
+      for (const { question } of displayedItems) {
+        const el = questionCardRefs.current.get(question.id);
+        if (!el) continue;
+        const rect = el.getBoundingClientRect();
+        const visibleHeight = Math.max(
+          0,
+          Math.min(rect.bottom, containerRect.bottom) - Math.max(rect.top, containerRect.top),
+        );
+        const centerDistance = Math.abs((rect.top + rect.bottom) / 2 - containerCenter);
+
+        if (
+          visibleHeight > bestVisible + 1 ||
+          (Math.abs(visibleHeight - bestVisible) <= 1 && centerDistance < bestDistance)
+        ) {
+          bestId = question.id;
+          bestVisible = visibleHeight;
+          bestDistance = centerDistance;
+        }
+      }
+
+      setFocusedQuestionId((prev) => (prev === bestId ? prev : bestId));
+    };
+
+    let rafId: number | null = null;
+    const scheduleUpdate = () => {
+      if (rafId !== null) return;
+      rafId = window.requestAnimationFrame(() => {
+        rafId = null;
+        computeFocusedQuestion();
+      });
+    };
+
+    computeFocusedQuestion();
+    container.addEventListener('scroll', scheduleUpdate, { passive: true });
+
+    let resizeObserver: ResizeObserver | null = null;
+    if (typeof ResizeObserver !== 'undefined') {
+      resizeObserver = new ResizeObserver(scheduleUpdate);
+      resizeObserver.observe(container);
+    } else {
+      window.addEventListener('resize', scheduleUpdate);
+    }
+
+    return () => {
+      if (rafId !== null) window.cancelAnimationFrame(rafId);
+      container.removeEventListener('scroll', scheduleUpdate);
+      if (resizeObserver) {
+        resizeObserver.disconnect();
+      } else {
+        window.removeEventListener('resize', scheduleUpdate);
+      }
+    };
+  }, [displayedItems]);
 
   const handleAddPageToQuiz = async () => {
     const pageIds = displayedItems.map((item) => item.question.id);
@@ -575,7 +654,7 @@ export function App(): React.ReactElement {
 
   if (manifestError) {
     return (
-      <div className="min-h-screen bg-slate-50 flex flex-col">
+      <div className="min-h-screen bg-[var(--bg-primary)] flex flex-col">
         <Navbar
           manifest={null}
           activeView="explore"
@@ -584,6 +663,8 @@ export function App(): React.ReactElement {
           activeQuizQuestionCount={activeQuiz?.questionIds.length ?? 0}
           backupStatus={backupStatus}
           githubUsername={githubSession?.username ?? null}
+          theme={theme}
+          onToggleTheme={toggleTheme}
           onSelectView={() => {}}
           onOpenSemanticModal={() => {}}
           onOpenQuizManager={() => setQuizManagerOpen(true)}
@@ -622,8 +703,18 @@ export function App(): React.ReactElement {
     );
   }
 
+  const isExploreView =
+    !(activeView === 'practice' && practiceSession) &&
+    !(activeView === 'prebuilt' && manifest);
+
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col">
+    <div
+      className={
+        isExploreView
+          ? 'flex h-screen flex-col overflow-hidden bg-[var(--bg-primary)]'
+          : 'min-h-screen bg-[var(--bg-primary)] flex flex-col'
+      }
+    >
       <Navbar
         manifest={manifest}
         activeView={activeView}
@@ -632,28 +723,14 @@ export function App(): React.ReactElement {
         activeQuizQuestionCount={activeQuiz?.questionIds.length ?? 0}
         backupStatus={backupStatus}
         githubUsername={githubSession?.username ?? null}
+        theme={theme}
+        onToggleTheme={toggleTheme}
         onSelectView={(v) => setActiveView(v)}
         onOpenSemanticModal={() => openSemanticModal()}
         onOpenQuizManager={() => setQuizManagerOpen(true)}
         onOpenFeedback={() => setFeedbackDrawerOpen(true)}
         onNotice={showNotice}
       />
-
-      {notice && (
-        <div className="border-b border-indigo-200 bg-indigo-50 px-4 py-2 text-xs text-indigo-900">
-          <div className="mx-auto flex max-w-[1600px] items-center justify-between gap-2 sm:px-2">
-            <span>{notice}</span>
-            <button
-              type="button"
-              aria-label="Dismiss notice"
-              onClick={() => setNotice(null)}
-              className="rounded p-0.5 hover:bg-indigo-100 cursor-pointer"
-            >
-              <X className="h-3.5 w-3.5" />
-            </button>
-          </div>
-        </div>
-      )}
 
       {activeView === 'practice' && practiceSession ? (
         <StudentPracticeView
@@ -682,15 +759,19 @@ export function App(): React.ReactElement {
           onNotice={showNotice}
         />
       ) : (
-        <div className="mx-auto flex w-full max-w-[1600px] flex-1 gap-6 px-4 py-6 sm:px-6">
+        <div className="mx-auto flex min-h-0 w-full max-w-[1600px] flex-1 gap-6 px-4 py-6 sm:px-6">
           {/* Desktop Sidebar */}
-          <div className="hidden w-80 shrink-0 lg:block">
+          <OverflowBlurScrollArea
+            className="hidden w-80 shrink-0 lg:block lg:h-full"
+            scrollClassName="lg:pr-1"
+          >
             {manifest ? (
               <FilterSidebar
                 manifest={manifest}
                 filters={filters}
-                subtopicFacets={subtopicFacets}
+                ascpPathFacets={ascpPathFacets}
                 facetsLoading={facetsLoading}
+                onEnsureTopicFacets={ensureTopicFacets}
                 activeSemanticShards={activeSemanticShards}
                 semanticPrompt={semanticPrompt}
                 semanticLoading={semanticLoading}
@@ -713,7 +794,7 @@ export function App(): React.ReactElement {
                 <Skeleton className="h-96 w-full" />
               </div>
             )}
-          </div>
+          </OverflowBlurScrollArea>
 
           {/* Mobile Filter Drawer */}
           {mobileFiltersOpen && manifest && (
@@ -722,9 +803,9 @@ export function App(): React.ReactElement {
                 className="fixed inset-0 bg-slate-900/40"
                 onClick={() => setMobileFiltersOpen(false)}
               />
-              <div className="relative z-10 h-full w-80 max-w-[85vw] overflow-y-auto bg-slate-50 p-4 shadow-xl">
-                <div className="mb-3 flex items-center justify-between">
-                  <span className="text-sm font-semibold text-slate-900">Filters</span>
+              <div className="relative z-10 flex h-full w-80 max-w-[85vw] flex-col bg-[var(--bg-primary)] shadow-xl">
+                <div className="flex shrink-0 items-center justify-between px-4 pt-4 pb-3">
+                  <span className="text-sm font-semibold text-[var(--text-primary)]">Filters</span>
                   <Button
                     variant="ghost"
                     size="icon"
@@ -733,38 +814,41 @@ export function App(): React.ReactElement {
                     <X className="h-4 w-4" />
                   </Button>
                 </div>
-                <FilterSidebar
-                  manifest={manifest}
-                  filters={filters}
-                  subtopicFacets={subtopicFacets}
-                  facetsLoading={facetsLoading}
-                  activeSemanticShards={activeSemanticShards}
-                  semanticPrompt={semanticPrompt}
-                  semanticLoading={semanticLoading}
-                  onUpdateFilters={updateFilters}
-                  onResetFilters={resetFilters}
-                  onOpenSemanticModal={() => {
-                    setMobileFiltersOpen(false);
-                    openSemanticModal();
-                  }}
-                  onSubmitSemanticPrompt={(prompt) => {
-                    setSemanticPrompt(prompt);
-                    updateFilters({ page: 1 });
-                  }}
-                  onClearSemanticPrompt={() => {
-                    setSemanticPrompt('');
-                    setSemanticResults([]);
-                    setSemanticMeta(null);
-                  }}
-                />
+                <OverflowBlurScrollArea className="flex-1 min-h-0" contentClassName="px-4 pb-4">
+                  <FilterSidebar
+                    manifest={manifest}
+                    filters={filters}
+                    ascpPathFacets={ascpPathFacets}
+                    facetsLoading={facetsLoading}
+                    onEnsureTopicFacets={ensureTopicFacets}
+                    activeSemanticShards={activeSemanticShards}
+                    semanticPrompt={semanticPrompt}
+                    semanticLoading={semanticLoading}
+                    onUpdateFilters={updateFilters}
+                    onResetFilters={resetFilters}
+                    onOpenSemanticModal={() => {
+                      setMobileFiltersOpen(false);
+                      openSemanticModal();
+                    }}
+                    onSubmitSemanticPrompt={(prompt) => {
+                      setSemanticPrompt(prompt);
+                      updateFilters({ page: 1 });
+                    }}
+                    onClearSemanticPrompt={() => {
+                      setSemanticPrompt('');
+                      setSemanticResults([]);
+                      setSemanticMeta(null);
+                    }}
+                  />
+                </OverflowBlurScrollArea>
               </div>
             </div>
           )}
 
           {/* Main Content Area */}
-          <main className="min-w-0 flex-1 space-y-4">
+          <main className="flex min-h-0 min-w-0 flex-1 flex-col gap-4">
             {/* Toolbar */}
-            <Card className="p-3.5 sm:p-4">
+            <Card className="shrink-0 p-3.5 sm:p-4">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div className="flex flex-wrap items-center gap-2">
                   <Button
@@ -776,8 +860,12 @@ export function App(): React.ReactElement {
                     <SlidersHorizontal className="h-3.5 w-3.5" />
                     Filters
                   </Button>
-                  <p className="text-sm text-slate-700">
-                    {isBusy ? (
+                  <p
+                    className={`text-sm text-[var(--text-secondary)] transition-opacity duration-200 ${
+                      isBusy && displayedItems.length > 0 ? 'opacity-60' : 'opacity-100'
+                    }`}
+                  >
+                    {isBusy && displayedItems.length === 0 ? (
                       <span>
                         {isSemanticActive
                           ? `Running hybrid semantic + BM25 search across ${activeSemanticShards.length} shard(s)...`
@@ -786,11 +874,11 @@ export function App(): React.ReactElement {
                     ) : isSemanticActive ? (
                       <span>
                         Ranked{' '}
-                        <strong className="font-semibold text-slate-950">
+                        <strong className="font-semibold text-[var(--text-primary)]">
                           {displayedTotal.toLocaleString()}
                         </strong>{' '}
                         hybrid semantic matches{' '}
-                        <span className="text-xs text-slate-500">
+                        <span className="text-xs text-[var(--text-secondary)]">
                           ({activeSemanticShards.length} active shard
                           {activeSemanticShards.length === 1 ? '' : 's'}
                           {semanticMeta
@@ -802,11 +890,11 @@ export function App(): React.ReactElement {
                     ) : (
                       <span>
                         Showing{' '}
-                        <strong className="font-semibold text-slate-950">
+                        <strong className="font-semibold text-[var(--text-primary)]">
                           {displayedTotal.toLocaleString()}
                         </strong>{' '}
                         matching questions{' '}
-                        <span className="text-xs text-slate-500">
+                        <span className="text-xs text-[var(--text-secondary)]">
                           ({shardsQueried} {shardsQueried === 1 ? 'shard' : 'shards'} •{' '}
                           {queryElapsedMs} ms)
                         </span>
@@ -826,24 +914,6 @@ export function App(): React.ReactElement {
                     Add Page ({displayedItems.length})
                   </Button>
 
-                  <Button
-                    variant={globalReveal ? 'primary' : 'outline'}
-                    size="sm"
-                    onClick={() => setGlobalReveal((prev) => !prev)}
-                  >
-                    {globalReveal ? (
-                      <>
-                        <EyeOff className="h-3.5 w-3.5" />
-                        Hide All Answers
-                      </>
-                    ) : (
-                      <>
-                        <Eye className="h-3.5 w-3.5" />
-                        Reveal All Answers
-                      </>
-                    )}
-                  </Button>
-
                   {!isSemanticActive && (
                     <select
                       aria-label="Sort questions"
@@ -851,13 +921,14 @@ export function App(): React.ReactElement {
                       onChange={(e) =>
                         updateFilters({ sortBy: e.target.value as SortOption, page: 1 })
                       }
-                      className="h-8 rounded-md border border-slate-300 bg-white px-2.5 text-xs font-medium text-slate-700"
+                      className="h-8 rounded-md border border-[var(--border-color)] bg-[var(--bg-surface)] px-2.5 text-xs font-medium text-[var(--text-primary)]"
                     >
-                      <option value="topic_asc">Sort: ASCP Topic &amp; Bloom&apos;s</option>
-                      <option value="difficulty_asc">Sort: Difficulty (Low → High)</option>
-                      <option value="difficulty_desc">Sort: Difficulty (High → Low)</option>
-                      <option value="bloom_desc">Sort: Cognitive Tier (AN → RE)</option>
-                      <option value="display_id_asc">Sort: Display ID (A → Z)</option>
+                      <option value="difficulty_asc">Sort: Difficulty (1 → 10)</option>
+                      <option value="difficulty_desc">Sort: Difficulty (10 → 1)</option>
+                      <option value="bloom_asc">Sort: Bloom (RE → AN)</option>
+                      <option value="bloom_desc">Sort: Bloom (AN → RE)</option>
+                      <option value="topic_asc">Sort: ASCP Topic (A → Z)</option>
+                      <option value="topic_desc">Sort: ASCP Topic (Z → A)</option>
                     </select>
                   )}
 
@@ -867,7 +938,7 @@ export function App(): React.ReactElement {
                     onChange={(e) =>
                       updateFilters({ pageSize: Number(e.target.value), page: 1 })
                     }
-                    className="h-8 rounded-md border border-slate-300 bg-white px-2 text-xs font-medium text-slate-700"
+                    className="h-8 rounded-md border border-[var(--border-color)] bg-[var(--bg-surface)] px-2 text-xs font-medium text-[var(--text-primary)]"
                   >
                     <option value={25}>25 / page</option>
                     <option value={50}>50 / page</option>
@@ -875,36 +946,11 @@ export function App(): React.ReactElement {
                   </select>
                 </div>
               </div>
-
-              {activeFilterChips.length > 0 && (
-                <div className="mt-3 flex flex-wrap items-center gap-1.5 pt-3 border-t border-slate-100">
-                  {activeFilterChips.map((chip) => (
-                    <Badge key={chip.key} variant="accent" className="gap-1 pr-1">
-                      <span>{chip.label}</span>
-                      <button
-                        type="button"
-                        aria-label={`Remove ${chip.label}`}
-                        onClick={chip.onRemove}
-                        className="rounded p-0.5 hover:bg-indigo-200/60 cursor-pointer"
-                      >
-                        <X className="h-3 w-3" />
-                      </button>
-                    </Badge>
-                  ))}
-                  <button
-                    type="button"
-                    onClick={resetFilters}
-                    className="text-xs font-medium text-slate-500 hover:text-slate-800 ml-1 cursor-pointer"
-                  >
-                    Clear all
-                  </button>
-                </div>
-              )}
             </Card>
 
             {/* Active Semantic Search + Stage 2 Centroid Suggestions */}
             {isSemanticActive && (
-              <Card className="border-indigo-200 bg-indigo-50/50 p-4 space-y-3">
+              <Card className="shrink-0 border-indigo-200 bg-indigo-50/50 p-4 space-y-3">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div className="flex flex-wrap items-center gap-2 text-xs text-indigo-950">
                     <Sparkles className="h-4 w-4 text-indigo-600" />
@@ -977,15 +1023,19 @@ export function App(): React.ReactElement {
             )}
 
             {(queryError || semanticError) && (
-              <Card className="border-rose-200 bg-rose-50/70 p-4 text-sm text-rose-900">
+              <Card className="shrink-0 border-rose-200 bg-rose-50/70 p-4 text-sm text-rose-900">
                 <strong className="font-semibold">Query Error: </strong>
                 {semanticError || queryError}
               </Card>
             )}
 
             {/* Question List */}
-            {isBusy ? (
-              <div className="space-y-4">
+            {isBusy && displayedItems.length === 0 ? (
+              <OverflowBlurScrollArea
+                className="min-h-0 flex-1"
+                scrollClassName="pr-1"
+                contentClassName="space-y-4"
+              >
                 {Array.from({ length: 4 }).map((_, i) => (
                   <Card key={i} className="p-5 space-y-3">
                     <Skeleton className="h-5 w-2/3" />
@@ -993,10 +1043,10 @@ export function App(): React.ReactElement {
                     <Skeleton className="h-20 w-full" />
                   </Card>
                 ))}
-              </div>
+              </OverflowBlurScrollArea>
             ) : displayedItems.length === 0 ? (
-              <Card className="p-10 text-center space-y-3">
-                <p className="text-sm font-medium text-slate-700">
+              <Card className="shrink-0 p-10 text-center space-y-3">
+                <p className="text-sm font-medium text-[var(--text-primary)]">
                   No questions matched the active filter criteria.
                 </p>
                 <Button variant="outline" size="sm" onClick={resetFilters}>
@@ -1004,33 +1054,67 @@ export function App(): React.ReactElement {
                 </Button>
               </Card>
             ) : (
-              <div className="space-y-4">
+              <OverflowBlurScrollArea
+                scrollRef={questionListRef}
+                aria-busy={isBusy}
+                className={`min-h-0 flex-1 transition-opacity duration-200 ${
+                  isBusy ? 'opacity-55 pointer-events-none' : 'opacity-100'
+                }`}
+                scrollClassName="pr-1"
+                contentClassName="space-y-4"
+                fadeClassName="h-16"
+              >
                 {displayedItems.map(({ question, semanticMatch }) => (
-                  <QuestionCard
+                  <div
                     key={question.id}
-                    question={question}
-                    globalReveal={globalReveal}
-                    semanticMatch={semanticMatch}
-                    quizzes={quizzes}
-                    activeQuizId={activeQuiz?.id ?? null}
-                    isBookmarked={bookmarkedIds.has(question.id)}
-                    onInspect={setInspectedQuestion}
-                    onAddToQuiz={handleAddToQuiz}
-                    onQuickCreateAndAdd={handleQuickCreateAndAdd}
-                    onToggleBookmark={handleToggleBookmark}
-                    onSuggestCorrection={setErrataQuestion}
-                    onDeferredAction={showNotice}
-                  />
+                    className="animate-card-enter"
+                    ref={(el) => {
+                      if (el) {
+                        questionCardRefs.current.set(question.id, el);
+                      } else {
+                        questionCardRefs.current.delete(question.id);
+                      }
+                    }}
+                  >
+                    <QuestionCard
+                      question={question}
+                      manifest={manifest}
+                      globalReveal={globalReveal}
+                      onToggleGlobalReveal={() => setGlobalReveal((prev) => !prev)}
+                      semanticMatch={semanticMatch}
+                      quizzes={quizzes}
+                      activeQuizId={activeQuiz?.id ?? null}
+                      isBookmarked={bookmarkedIds.has(question.id)}
+                      isFocused={
+                        focusedQuestionId ? focusedQuestionId === question.id : undefined
+                      }
+                      onAddToQuiz={handleAddToQuiz}
+                      onRemoveFromQuiz={handleRemoveFromQuiz}
+                      onQuickCreateAndAdd={handleQuickCreateAndAdd}
+                      onToggleBookmark={handleToggleBookmark}
+                      onSuggestCorrection={setErrataQuestion}
+                      localRemixes={remixesByParent[question.id] ?? []}
+                      onOpenRemix={(sourceQuestion, parentQuestionId, editingRemix) =>
+                        setRemixModalState({ sourceQuestion, parentQuestionId, editingRemix })
+                      }
+                      onDeleteRemix={async (remixId) => {
+                        await deleteRemixedQuestion(remixId);
+                        await refreshWorkspace();
+                        showNotice('Removed local question remix.');
+                      }}
+                      onDeferredAction={showNotice}
+                    />
+                  </div>
                 ))}
-              </div>
+              </OverflowBlurScrollArea>
             )}
 
             {/* Pagination */}
             {displayedTotal > 0 && (
-              <Card className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
-                <span className="text-xs text-slate-600">
-                  Page <strong className="text-slate-900">{filters.page}</strong> of{' '}
-                  <strong className="text-slate-900">{totalPages.toLocaleString()}</strong>
+              <Card className="shrink-0 flex flex-wrap items-center justify-between gap-3 px-4 py-3">
+                <span className="text-xs text-[var(--text-secondary)]">
+                  Page <strong className="text-[var(--text-primary)]">{filters.page}</strong> of{' '}
+                  <strong className="text-[var(--text-primary)]">{totalPages.toLocaleString()}</strong>
                 </span>
                 <div className="flex items-center gap-2">
                   <Button
@@ -1039,7 +1123,7 @@ export function App(): React.ReactElement {
                     disabled={filters.page <= 1 || isBusy}
                     onClick={() => {
                       updateFilters({ page: Math.max(1, filters.page - 1) });
-                      window.scrollTo({ top: 0, behavior: 'smooth' });
+                      questionListRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
                     }}
                   >
                     <ChevronLeft className="h-4 w-4" />
@@ -1051,7 +1135,7 @@ export function App(): React.ReactElement {
                     disabled={filters.page >= totalPages || isBusy}
                     onClick={() => {
                       updateFilters({ page: Math.min(totalPages, filters.page + 1) });
-                      window.scrollTo({ top: 0, behavior: 'smooth' });
+                      questionListRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
                     }}
                   >
                     Next
@@ -1066,20 +1150,6 @@ export function App(): React.ReactElement {
 
       {manifest && (
         <>
-          <QuestionDetailDrawer
-            manifest={manifest}
-            question={inspectedQuestion}
-            activeQuizName={activeQuiz?.name ?? null}
-            inActiveQuiz={Boolean(
-              inspectedQuestion && activeQuiz?.questionIds.includes(inspectedQuestion.id),
-            )}
-            onAddToActiveQuiz={(qid) =>
-              activeQuiz ? handleAddToQuiz(activeQuiz.id, qid) : handleQuickCreateAndAdd(qid)
-            }
-            onSuggestCorrection={setErrataQuestion}
-            onClose={() => setInspectedQuestion(null)}
-            onSelectQuestion={setInspectedQuestion}
-          />
           <SemanticSearchModal
             open={semanticModalOpen}
             manifest={manifest}
@@ -1140,6 +1210,25 @@ export function App(): React.ReactElement {
         onSubmitted={(issueUrl, issueNumber) =>
           showNotice(`Submitted Errata GitHub Issue #${issueNumber} (${issueUrl}).`)
         }
+      />
+
+      <QuestionRemixModal
+        open={remixModalState !== null}
+        sourceQuestion={remixModalState?.sourceQuestion ?? null}
+        parentQuestionId={remixModalState?.parentQuestionId ?? null}
+        editingRemix={remixModalState?.editingRemix ?? null}
+        manifest={manifest}
+        githubSession={githubSession}
+        onClose={() => setRemixModalState(null)}
+        onOpenFeedbackAuth={() => setFeedbackDrawerOpen(true)}
+        onSavedLocal={() => {
+          void refreshWorkspace();
+          showNotice('Saved remixed variant locally.');
+        }}
+        onSubmittedCommunity={(_record, issueUrl, issueNumber) => {
+          void refreshWorkspace();
+          showNotice(`Saved locally & submitted Variant Issue #${issueNumber} (${issueUrl}).`);
+        }}
       />
     </div>
   );

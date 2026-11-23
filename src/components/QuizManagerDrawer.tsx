@@ -371,7 +371,7 @@ export function QuizManagerDrawer({
             'rounded-xl border p-3.5 text-xs space-y-2.5',
             unsyncedTotal > 0
               ? 'border-amber-300 bg-amber-50/80 text-amber-950'
-              : 'border-slate-200 bg-slate-50 text-slate-700',
+              : 'border-[var(--border-color)] bg-[var(--bg-primary)] text-[var(--text-primary)]',
           )}
         >
           <div className="flex items-start gap-2">
@@ -417,7 +417,7 @@ export function QuizManagerDrawer({
                 variant="outline"
                 size="sm"
                 onClick={() => fileInputRef.current?.click()}
-                className="bg-white h-7 text-xs"
+                className="bg-[var(--bg-surface)] h-7 text-xs"
               >
                 <Upload className="h-3 w-3" />
                 Import JSON
@@ -438,7 +438,7 @@ export function QuizManagerDrawer({
           <div className="pt-2 border-t border-amber-200/70 space-y-2">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div className="flex items-center gap-1.5 text-[11px]">
-                <Github className="h-3.5 w-3.5 text-slate-700" />
+                <Github className="h-3.5 w-3.5 text-[var(--text-primary)]" />
                 {githubSession ? (
                   <span>
                     GitHub Gist Sync connected as <strong>@{githubSession.username}</strong>
@@ -457,7 +457,7 @@ export function QuizManagerDrawer({
                       size="sm"
                       disabled={gistSyncBusy}
                       onClick={handleSyncGist}
-                      className="bg-white h-7 text-xs"
+                      className="bg-[var(--bg-surface)] h-7 text-xs"
                     >
                       <Cloud className="h-3 w-3 text-indigo-600" />
                       {gistSyncBusy ? 'Syncing...' : 'Sync to Private Gist'}
@@ -467,7 +467,7 @@ export function QuizManagerDrawer({
                       size="sm"
                       disabled={gistSyncBusy}
                       onClick={handleRestoreGist}
-                      className="bg-white h-7 text-xs"
+                      className="bg-[var(--bg-surface)] h-7 text-xs"
                     >
                       <RefreshCw className="h-3 w-3" />
                       Restore Gist
@@ -498,7 +498,7 @@ export function QuizManagerDrawer({
                             onNotice(err instanceof Error ? err.message : String(err));
                           }
                         }}
-                        className="bg-white h-7 text-xs"
+                        className="bg-[var(--bg-surface)] h-7 text-xs"
                       >
                         <Github className="h-3 w-3" />
                         Sign in with GitHub
@@ -508,7 +508,7 @@ export function QuizManagerDrawer({
                       variant="outline"
                       size="sm"
                       onClick={() => setShowPatBox((prev) => !prev)}
-                      className="bg-white h-7 text-xs"
+                      className="bg-[var(--bg-surface)] h-7 text-xs"
                     >
                       <KeyRound className="h-3 w-3" />
                       Connect via Token (PAT)
@@ -536,7 +536,7 @@ export function QuizManagerDrawer({
                   onChange={(e) => setPatDraft(e.target.value)}
                   placeholder="Paste GitHub PAT (with gist scope)..."
                   aria-label="GitHub PAT for private gist sync"
-                  className="h-7 flex-1 min-w-[200px] text-xs bg-white"
+                  className="h-7 flex-1 min-w-[200px] text-xs bg-[var(--bg-surface)]"
                 />
                 <Button type="submit" variant="primary" size="sm" disabled={gistSyncBusy} className="h-7 text-xs">
                   {gistSyncBusy ? 'Connecting...' : 'Connect'}
@@ -547,7 +547,7 @@ export function QuizManagerDrawer({
         </div>
 
         {/* Create Quiz & Switch Active Quiz */}
-        <div className="rounded-xl border border-slate-200 bg-white p-4 space-y-3">
+        <div className="rounded-xl border border-[var(--border-color)] bg-[var(--bg-surface)] p-4 space-y-3">
           <form onSubmit={handleCreateQuiz} className="flex flex-wrap gap-2">
             <Input
               aria-label="New quiz name"
@@ -563,12 +563,12 @@ export function QuizManagerDrawer({
           </form>
 
           {quizzes.length > 0 && activeQuiz && (
-            <div className="pt-3 border-t border-slate-100 space-y-3">
+            <div className="pt-3 border-t border-[var(--border-color)] space-y-3">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div className="flex items-center gap-2 flex-1 min-w-[220px]">
                   <label
                     htmlFor="active-quiz-select"
-                    className="text-xs font-semibold text-slate-600 shrink-0"
+                    className="text-xs font-semibold text-[var(--text-secondary)] shrink-0"
                   >
                     Active Quiz:
                   </label>
@@ -576,7 +576,7 @@ export function QuizManagerDrawer({
                     id="active-quiz-select"
                     value={activeQuiz.id}
                     onChange={(e) => onSelectActiveQuiz(e.target.value)}
-                    className="h-8 flex-1 rounded-md border border-slate-300 bg-white px-2.5 text-xs font-semibold text-slate-900"
+                    className="h-8 flex-1 rounded-md border border-[var(--border-color)] bg-[var(--bg-surface)] px-2.5 text-xs font-semibold text-[var(--text-primary)]"
                   >
                     {quizzes.map((q) => (
                       <option key={q.id} value={q.id}>
@@ -612,7 +612,7 @@ export function QuizManagerDrawer({
               </div>
 
               {editingName && (
-                <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 space-y-2">
+                <div className="rounded-lg border border-[var(--border-color)] bg-[var(--bg-primary)] p-3 space-y-2">
                   <Input
                     aria-label="Edit quiz title"
                     value={renameDraft}
@@ -654,13 +654,13 @@ export function QuizManagerDrawer({
 
         {/* Active Quiz Tabs */}
         {!activeQuiz ? (
-          <div className="rounded-xl border border-dashed border-slate-300 p-8 text-center text-sm text-slate-500">
+          <div className="rounded-xl border border-dashed border-[var(--border-color)] p-8 text-center text-sm text-[var(--text-secondary)]">
             Create your first quiz above to start adding questions, analyzing ASCP blueprint
             balance, and exporting to D2L, QTI, Aiken, or Word.
           </div>
         ) : (
           <div className="space-y-4">
-            <div className="flex flex-wrap gap-1.5 border-b border-slate-200 pb-2">
+            <div className="flex flex-wrap gap-1.5 border-b border-[var(--border-color)] pb-2">
               {(
                 [
                   ['questions', `Questions (${activeQuiz.questionIds.length})`],
@@ -677,7 +677,7 @@ export function QuizManagerDrawer({
                     'rounded-lg px-3 py-1.5 text-xs font-semibold transition cursor-pointer',
                     activeTab === tabKey
                       ? 'bg-indigo-600 text-white'
-                      : 'bg-slate-100 text-slate-700 hover:bg-slate-200',
+                      : 'bg-[var(--bg-primary)] text-[var(--text-primary)] hover:bg-[var(--cream-surface-soft)]',
                   )}
                 >
                   {label}
@@ -701,9 +701,9 @@ export function QuizManagerDrawer({
                       {enemyPairs.map((pair) => (
                         <div
                           key={`${pair.a.id}-${pair.b.id}`}
-                          className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-200 bg-white px-3 py-2 text-xs"
+                          className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-200 bg-[var(--bg-surface)] px-3 py-2 text-xs"
                         >
-                          <span className="text-slate-800">
+                          <span className="text-[var(--text-primary)]">
                             <strong className="font-mono">{pair.a.displayId}</strong> and{' '}
                             <strong className="font-mono">{pair.b.displayId}</strong> test
                             nearly identical content.
@@ -742,7 +742,7 @@ export function QuizManagerDrawer({
                     <Skeleton className="h-16 w-full" />
                   </div>
                 ) : quizQuestions.length === 0 ? (
-                  <div className="rounded-xl border border-dashed border-slate-300 p-8 text-center text-xs text-slate-500">
+                  <div className="rounded-xl border border-dashed border-[var(--border-color)] p-8 text-center text-xs text-[var(--text-secondary)]">
                     This quiz has no questions yet. Click{' '}
                     <strong>+ Add to Quiz</strong> on any question card in the Explorer.
                   </div>
@@ -756,12 +756,12 @@ export function QuizManagerDrawer({
                       return (
                         <div
                           key={q.id}
-                          className="rounded-xl border border-slate-200 bg-white p-3.5 space-y-2.5"
+                          className="rounded-xl border border-[var(--border-color)] bg-[var(--bg-surface)] p-3.5 space-y-2.5"
                         >
                           <div className="flex flex-wrap items-start justify-between gap-2">
                             <div className="space-y-1 min-w-0 flex-1">
                               <div className="flex flex-wrap items-center gap-1.5">
-                                <span className="font-mono text-xs font-bold text-slate-500">
+                                <span className="font-mono text-xs font-bold text-[var(--text-secondary)]">
                                   #{idx + 1}
                                 </span>
                                 <Badge
@@ -784,13 +784,13 @@ export function QuizManagerDrawer({
                                   Diff {q.difficulty}
                                 </Badge>
                               </div>
-                              <p className="text-xs font-medium text-slate-900 line-clamp-2">
+                              <p className="text-xs font-medium text-[var(--text-primary)] line-clamp-2">
                                 {q.questionText}
                               </p>
                             </div>
 
                             <div className="flex flex-wrap items-center gap-1 shrink-0">
-                              <label className="flex items-center gap-1 text-[11px] text-slate-500 mr-1">
+                              <label className="flex items-center gap-1 text-[11px] text-[var(--text-secondary)] mr-1">
                                 Pts
                                 <input
                                   type="number"
@@ -806,7 +806,7 @@ export function QuizManagerDrawer({
                                     );
                                     await onWorkspaceChanged(activeQuiz.id);
                                   }}
-                                  className="h-7 w-14 rounded border border-slate-300 px-1.5 text-xs text-slate-900"
+                                  className="h-7 w-14 rounded border border-[var(--border-color)] px-1.5 text-xs text-[var(--text-primary)]"
                                 />
                               </label>
                               <Button
@@ -874,7 +874,7 @@ export function QuizManagerDrawer({
                               {swapLoading ? (
                                 <Skeleton className="h-12 w-full" />
                               ) : swapCandidates.length === 0 ? (
-                                <p className="text-xs text-slate-600">
+                                <p className="text-xs text-[var(--text-secondary)]">
                                   No sibling variants found.
                                 </p>
                               ) : (
@@ -884,13 +884,13 @@ export function QuizManagerDrawer({
                                     return (
                                       <div
                                         key={cand.id}
-                                        className="flex items-center justify-between gap-2 rounded border border-indigo-200 bg-white px-2.5 py-2 text-xs"
+                                        className="flex items-center justify-between gap-2 rounded border border-indigo-200 bg-[var(--bg-surface)] px-2.5 py-2 text-xs"
                                       >
                                         <div className="min-w-0">
-                                          <span className="font-mono font-semibold text-slate-700 mr-1.5">
+                                          <span className="font-mono font-semibold text-[var(--text-primary)] mr-1.5">
                                             {cand.displayId}
                                           </span>
-                                          <span className="text-slate-800 line-clamp-1">
+                                          <span className="text-[var(--text-primary)] line-clamp-1">
                                             {cand.questionText}
                                           </span>
                                         </div>
@@ -924,7 +924,7 @@ export function QuizManagerDrawer({
 
             {activeTab === 'export' && (
               <div className="space-y-4">
-                <p className="text-xs text-slate-600">
+                <p className="text-xs text-[var(--text-secondary)]">
                   Export <strong>{activeQuiz.name}</strong> ({quizQuestions.length} questions)
                   under <strong>CC0 1.0 Public Domain</strong> into LMS packages, Word
                   documents, or printable formats:
@@ -957,20 +957,20 @@ export function QuizManagerDrawer({
                       value={shareAuthor}
                       onChange={(e) => setShareAuthor(e.target.value)}
                       placeholder="Optional Author Name"
-                      className="h-8 text-xs bg-white"
+                      className="h-8 text-xs bg-[var(--bg-surface)]"
                     />
                     <Input
                       value={shareInstitution}
                       onChange={(e) => setShareInstitution(e.target.value)}
                       placeholder="Optional Institution (e.g., Augusta University)"
-                      className="h-8 text-xs bg-white"
+                      className="h-8 text-xs bg-[var(--bg-surface)]"
                     />
                   </div>
                   <Input
                     value={shareTags}
                     onChange={(e) => setShareTags(e.target.value)}
                     placeholder="Optional comma-separated tags (e.g., midterm, hematology, fall-2026)"
-                    className="h-8 text-xs bg-white"
+                    className="h-8 text-xs bg-[var(--bg-surface)]"
                   />
 
                   <Separator />
@@ -1000,7 +1000,7 @@ export function QuizManagerDrawer({
                       size="sm"
                       disabled={!sharePayload}
                       onClick={() => copyShareUrl('practice')}
-                      className="bg-white"
+                      className="bg-[var(--bg-surface)]"
                     >
                       {copiedMode === 'practice' ? (
                         <>
@@ -1027,7 +1027,7 @@ export function QuizManagerDrawer({
                           activeQuiz.description,
                         );
                       }}
-                      className="bg-white"
+                      className="bg-[var(--bg-surface)]"
                     >
                       <Play className="h-3.5 w-3.5 text-emerald-600" />
                       Preview Student Self-Practice
@@ -1038,7 +1038,7 @@ export function QuizManagerDrawer({
                         href={buildPrebuiltCatalogIssueUrl(sharePayload)}
                         target="_blank"
                         rel="noreferrer"
-                        className="inline-flex h-8 items-center justify-center gap-1.5 rounded-md border border-slate-300 bg-white px-2.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
+                        className="inline-flex h-8 items-center justify-center gap-1.5 rounded-md border border-[var(--border-color)] bg-[var(--bg-surface)] px-2.5 text-xs font-medium text-[var(--text-primary)] hover:bg-[var(--bg-primary)]"
                       >
                         <ExternalLink className="h-3.5 w-3.5" />
                         Submit to Community Catalog
@@ -1050,7 +1050,7 @@ export function QuizManagerDrawer({
                       size="sm"
                       disabled={!sharePayload || !githubSession || publishingGist}
                       onClick={handlePublishPrebuiltGist}
-                      className="bg-white sm:col-span-2"
+                      className="bg-[var(--bg-surface)] sm:col-span-2"
                     >
                       <Cloud className="h-3.5 w-3.5 text-indigo-600" />
                       {publishingGist
@@ -1079,7 +1079,7 @@ export function QuizManagerDrawer({
                         <Button
                           variant="outline"
                           size="sm"
-                          className="bg-white h-7 text-xs"
+                          className="bg-[var(--bg-surface)] h-7 text-xs"
                           onClick={async () => {
                             await navigator.clipboard.writeText(publishedPrebuiltGist.shareUrl);
                             onNotice('Copied short Gist Educator Remix URL.');
@@ -1091,7 +1091,7 @@ export function QuizManagerDrawer({
                         <Button
                           variant="outline"
                           size="sm"
-                          className="bg-white h-7 text-xs"
+                          className="bg-[var(--bg-surface)] h-7 text-xs"
                           onClick={async () => {
                             await navigator.clipboard.writeText(publishedPrebuiltGist.practiceShareUrl);
                             onNotice('Copied short Gist Student Practice URL.');
@@ -1104,7 +1104,7 @@ export function QuizManagerDrawer({
                     </div>
                   )}
 
-                  <p className="text-[11px] text-slate-500">
+                  <p className="text-[11px] text-[var(--text-secondary)]">
                     All shared Pre-Built quizzes are dedicated under CC0 1.0 Public Domain.
                     Backup filename suggestion:{' '}
                     <code className="font-mono">{sanitizeFilename(activeQuiz.name)}.json</code>

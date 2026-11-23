@@ -207,15 +207,15 @@ export function SemanticSearchModal({
         aria-hidden="true"
       />
 
-      <div className="relative z-10 flex max-h-[90vh] w-full max-w-4xl flex-col rounded-2xl border border-slate-200 bg-white shadow-2xl">
+      <div className="relative z-10 flex max-h-[90vh] w-full max-w-4xl flex-col rounded-2xl border border-[var(--border-color)] bg-[var(--bg-surface)] shadow-2xl">
         {/* Header */}
-        <div className="flex items-start justify-between gap-4 border-b border-slate-200 px-6 py-4">
+        <div className="flex items-start justify-between gap-4 border-b border-[var(--border-color)] px-6 py-4">
           <div>
-            <h2 className="flex items-center gap-2 text-lg font-bold text-slate-900">
+            <h2 className="flex items-center gap-2 text-lg font-bold text-[var(--text-primary)]">
               <Sparkles className="h-5 w-5 text-indigo-600" />
               Semantic Prompt Search — Select &amp; Download Shards
             </h2>
-            <p className="mt-1 text-xs text-slate-600">
+            <p className="mt-1 text-xs text-[var(--text-secondary)]">
               To keep this $0 OER fast at 1M+ scale, AI search runs locally in your browser
               and only downloads the topic shards you explicitly approve.
             </p>
@@ -267,12 +267,12 @@ export function SemanticSearchModal({
                       className={cn(
                         'flex items-start justify-between gap-2 rounded-lg border p-2.5 text-left text-xs transition cursor-pointer',
                         checked
-                          ? 'border-indigo-500 bg-white ring-1 ring-indigo-500'
-                          : 'border-indigo-200 bg-white/80 hover:bg-white',
+                          ? 'border-indigo-500 bg-[var(--bg-surface)] ring-1 ring-indigo-500'
+                          : 'border-indigo-200 bg-[var(--bg-surface)] hover:bg-[var(--bg-surface)]',
                       )}
                     >
                       <div className="min-w-0">
-                        <div className="font-semibold text-slate-900 truncate">
+                        <div className="font-semibold text-[var(--text-primary)] truncate">
                           {rec.shard.topicCode} — {rec.shard.topicName}
                         </div>
                         <div className="text-[11px] text-indigo-700 truncate">
@@ -290,16 +290,16 @@ export function SemanticSearchModal({
           </div>
 
           {/* Model Card */}
-          <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-4">
+          <div className="rounded-xl border border-[var(--border-color)] bg-[var(--bg-primary)] p-4">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div className="flex items-center gap-2.5">
                 <Cpu className="h-5 w-5 text-indigo-600" />
                 <div>
-                  <div className="text-sm font-semibold text-slate-900">
-                    In-Browser Embedding Model ({manifest.embeddingModel})
+                  <div className="text-sm font-semibold text-[var(--text-primary)]">
+                    In-Browser Semantic Embedding Model
                   </div>
-                  <div className="text-xs text-slate-500">
-                    One-time ~33 MB quantized ONNX download • Cached locally in browser
+                  <div className="text-xs text-[var(--text-secondary)]">
+                    One-time ~33 MB download • Cached locally in browser
                   </div>
                 </div>
               </div>
@@ -326,7 +326,7 @@ export function SemanticSearchModal({
               (downloadSnapshot.model.status === 'downloading' ||
                 downloadSnapshot.model.status === 'queued') && (
                 <div className="mt-3 space-y-1">
-                  <div className="flex justify-between text-[11px] text-slate-600">
+                  <div className="flex justify-between text-[11px] text-[var(--text-secondary)]">
                     <span className="truncate">
                       {downloadSnapshot.model.file || 'Initializing ONNX pipeline...'}
                     </span>
@@ -336,7 +336,7 @@ export function SemanticSearchModal({
                       {downloadSnapshot.model.percent}%)
                     </span>
                   </div>
-                  <div className="h-2 w-full overflow-hidden rounded-full bg-slate-200">
+                  <div className="h-2 w-full overflow-hidden rounded-full bg-slate-200 dark:bg-slate-700">
                     <div
                       className="h-full bg-indigo-600 transition-all duration-150"
                       style={{ width: `${downloadSnapshot.model.percent}%` }}
@@ -349,7 +349,7 @@ export function SemanticSearchModal({
           {/* Multi-Shard Topic Selector */}
           <div className="space-y-3">
             <div className="flex items-center justify-between">
-              <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+              <h3 className="text-xs font-semibold uppercase tracking-wider text-[var(--text-secondary)]">
                 Select 1 or More ASCP Topic Shards ({selectedIds.length} selected)
               </h3>
               {hasAnyCachedData && (
@@ -379,9 +379,9 @@ export function SemanticSearchModal({
                 return (
                   <div
                     key={disc.code}
-                    className="rounded-xl border border-slate-200 bg-white overflow-hidden"
+                    className="rounded-xl border border-[var(--border-color)] bg-[var(--bg-surface)] overflow-hidden"
                   >
-                    <div className="flex items-center justify-between gap-2 bg-slate-50 px-3.5 py-2.5 border-b border-slate-200">
+                    <div className="flex items-center justify-between gap-2 bg-[var(--bg-primary)] px-3.5 py-2.5 border-b border-[var(--border-color)]">
                       <div className="flex items-center gap-2 min-w-0">
                         <span
                           className={cn(
@@ -391,12 +391,12 @@ export function SemanticSearchModal({
                         >
                           {disc.code}
                         </span>
-                        <span className="text-xs font-semibold text-slate-900 truncate">
+                        <span className="text-xs font-semibold text-[var(--text-primary)] truncate">
                           {disc.name}
                         </span>
                       </div>
                       <div className="flex items-center gap-2 shrink-0">
-                        <span className="text-[11px] font-mono text-slate-500">
+                        <span className="text-[11px] font-mono text-[var(--text-secondary)]">
                           {formatBytes(discBytes)}
                         </span>
                         <button
@@ -410,7 +410,7 @@ export function SemanticSearchModal({
                       </div>
                     </div>
 
-                    <div className="divide-y divide-slate-100">
+                    <div className="divide-y divide-[var(--border-color)]">
                       {disc.shards.map((shard) => {
                         const checked = selectedSet.has(shard.shardId);
                         const shardSize = shard.vectors.bytes + shard.ids.bytes;
@@ -429,16 +429,13 @@ export function SemanticSearchModal({
                                   disabled={isDownloading}
                                   checked={checked}
                                   onChange={() => toggleShard(shard.shardId)}
-                                  className="h-4 w-4 rounded border-slate-300 text-indigo-600"
+                                  className="h-4 w-4 rounded border-[var(--border-color)] text-indigo-600"
                                 />
                                 <span className="min-w-0">
-                                  <span className="block text-xs font-medium text-slate-900 truncate">
-                                    <span className="font-mono text-slate-500 mr-1">
-                                      {shard.topicCode}
-                                    </span>
+                                  <span className="block text-xs font-medium text-[var(--text-primary)] truncate">
                                     {shard.topicName}
                                   </span>
-                                  <span className="text-[11px] text-slate-500">
+                                  <span className="text-[11px] text-[var(--text-secondary)]">
                                     {shard.questionCount.toLocaleString()} questions •{' '}
                                     {formatBytes(shardSize)}
                                   </span>
@@ -477,14 +474,14 @@ export function SemanticSearchModal({
 
                             {liveProg && liveProg.status === 'downloading' && (
                               <div className="pl-6 space-y-1">
-                                <div className="flex justify-between text-[10px] font-mono text-slate-500">
+                                <div className="flex justify-between text-[10px] font-mono text-[var(--text-secondary)]">
                                   <span>Downloading vector shard...</span>
                                   <span>
                                     {formatBytes(liveProg.loaded)} /{' '}
                                     {formatBytes(liveProg.total)} ({liveProg.percent}%)
                                   </span>
                                 </div>
-                                <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-200">
+                                <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-200 dark:bg-slate-700">
                                   <div
                                     className="h-full bg-indigo-600 transition-all duration-150"
                                     style={{ width: `${liveProg.percent}%` }}
@@ -513,7 +510,7 @@ export function SemanticSearchModal({
         <Separator />
 
         {/* Footer / Explicit Consent Gate */}
-        <div className="px-6 py-4 bg-slate-50 rounded-b-2xl space-y-3">
+        <div className="px-6 py-4 bg-[var(--bg-primary)] rounded-b-2xl space-y-3">
           {downloadSnapshot && isDownloading && (
             <div className="space-y-1">
               <div className="flex justify-between text-xs font-medium text-indigo-900">
@@ -530,17 +527,17 @@ export function SemanticSearchModal({
           )}
 
           {totalDownloadBytes > 0 && (
-            <label className="flex items-start gap-2.5 text-xs text-slate-700 cursor-pointer">
+            <label className="flex items-start gap-2.5 text-xs text-[var(--text-primary)] cursor-pointer">
               <input
                 type="checkbox"
                 disabled={isDownloading}
                 checked={consentChecked}
                 onChange={(e) => setConsentChecked(e.target.checked)}
-                className="mt-0.5 h-4 w-4 rounded border-slate-300 text-indigo-600"
+                className="mt-0.5 h-4 w-4 rounded border-[var(--border-color)] text-indigo-600"
               />
               <span>
                 I agree to download{' '}
-                <strong className="font-semibold text-slate-900">
+                <strong className="font-semibold text-[var(--text-primary)]">
                   ~{formatBytes(totalDownloadBytes)}
                 </strong>{' '}
                 (
@@ -553,7 +550,7 @@ export function SemanticSearchModal({
           )}
 
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <span className="text-xs text-slate-500">
+            <span className="text-xs text-[var(--text-secondary)]">
               {selectedIds.length === 0
                 ? 'Select at least 1 topic shard to enable semantic search.'
                 : totalDownloadBytes === 0

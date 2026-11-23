@@ -110,17 +110,19 @@ export interface QuestionRecord {
 }
 
 export type SortOption =
-  | 'topic_asc'
   | 'difficulty_asc'
   | 'difficulty_desc'
+  | 'bloom_asc'
   | 'bloom_desc'
-  | 'display_id_asc';
+  | 'topic_asc'
+  | 'topic_desc';
 
 export interface FilterState {
   disciplines: string[];
   topicCodes: string[];
   subtopics: string[];
   leafTopics: string[];
+  ascpPaths: string[];
   bloomLevels: string[];
   difficultyMin: number;
   difficultyMax: number;
@@ -138,18 +140,25 @@ export interface SubtopicFacet {
   count: number;
 }
 
+export interface AscpPathFacet {
+  topicCode: string;
+  ascpPath: string;
+  count: number;
+}
+
 export const DEFAULT_FILTERS: FilterState = {
   disciplines: [],
   topicCodes: [],
   subtopics: [],
   leafTopics: [],
+  ascpPaths: [],
   bloomLevels: [],
   difficultyMin: 1,
   difficultyMax: 10,
   subsetTags: [],
   questionTypes: [],
   keyword: '',
-  sortBy: 'topic_asc',
+  sortBy: 'difficulty_asc',
   page: 1,
   pageSize: 25,
 };

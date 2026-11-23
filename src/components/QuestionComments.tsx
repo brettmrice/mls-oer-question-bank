@@ -19,12 +19,12 @@ export function QuestionComments({
   return (
     <section
       aria-label="Community Comments and Errata Thread"
-      className="rounded-xl border border-slate-200 bg-slate-50/70 p-4"
+      className="rounded-xl border border-[var(--border-color)] bg-[var(--bg-primary)] p-4"
     >
       <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
         <div className="flex items-center gap-2 min-w-0">
-          <MessageSquare className="h-4 w-4 text-indigo-600 shrink-0" />
-          <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-800">
+          <MessageSquare className="h-4 w-4 text-indigo-600 dark:text-indigo-400 shrink-0" />
+          <h3 className="text-xs font-semibold uppercase tracking-wide text-[var(--text-primary)]">
             Community Comments &amp; Errata Thread
           </h3>
         </div>
@@ -42,7 +42,7 @@ export function QuestionComments({
       </div>
 
       {cfg.isGiscusConfigured && cfg.giscusRepoId && cfg.giscusCategoryId ? (
-        <div className="rounded-lg border border-slate-200 bg-white p-3">
+        <div className="rounded-lg border border-[var(--border-color)] bg-[var(--bg-surface)] p-3">
           <Giscus
             id={`giscus-${questionId}`}
             repo={cfg.repo}
@@ -55,19 +55,19 @@ export function QuestionComments({
             reactionsEnabled="1"
             emitMetadata="0"
             inputPosition="top"
-            theme="light"
+            theme="preferred_color_scheme"
             lang="en"
             loading="lazy"
           />
         </div>
       ) : (
-        <div className="rounded-lg border border-dashed border-slate-300 bg-white p-3.5 text-xs text-slate-600 space-y-2">
+        <div className="rounded-lg border border-dashed border-[var(--border-color)] bg-[var(--bg-surface)] p-3.5 text-xs text-[var(--text-secondary)] space-y-2">
           <p>
             Discussions bind immutably via Giscus (<code className="font-mono">mapping=&quot;specific&quot;</code>,{' '}
             <code className="font-mono">term=&quot;{questionId}&quot;</code>) so comments never break when taxonomy
             codes evolve.
           </p>
-          <p className="text-slate-500">
+          <p className="text-[var(--text-secondary)]">
             Giscus environment variables (<code className="font-mono">VITE_GISCUS_REPO_ID</code> and{' '}
             <code className="font-mono">VITE_GISCUS_CATEGORY_ID</code>) are not configured in this local build.
           </p>

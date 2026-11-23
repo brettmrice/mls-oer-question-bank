@@ -8,8 +8,19 @@
       name="description"
       content="Open Educational Resource question bank for Medical Laboratory Science (MLS) educators, aligned with ASCP BOC content guidelines and licensed under CC0 1.0."
     />
+    <script>
+      (function () {
+        try {
+          var saved = localStorage.getItem('oer_theme');
+          var theme = saved === 'dark' || saved === 'light'
+            ? saved
+            : (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+          document.documentElement.setAttribute('data-theme', theme);
+        } catch (e) {}
+      })();
+    </script>
   </head>
-  <body class="bg-slate-50 text-slate-900 antialiased">
+  <body class="antialiased">
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

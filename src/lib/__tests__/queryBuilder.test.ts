@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  buildAscpPathFacetQuery,
   buildFacetQuery,
   buildOrderByClause,
   buildQuestionQuery,
@@ -130,7 +131,15 @@ describe('queryBuilder', () => {
   });
 
   it('applies sort allowlist and pagination LIMIT/OFFSET', () => {
+    expect(buildOrderByClause(DEFAULT_FILTERS.sortBy)).toBe(
+      'ORDER BY difficulty ASC, topic_code ASC, display_id ASC',
+    );
+    expect(buildOrderByClause('bloom_asc')).toContain(
+      "CASE bloom_level WHEN 'RE' THEN 1 WHEN 'UN' THEN 2 WHEN 'AP' THEN 3 WHEN 'AN' THEN 4 ELSE 5 END ASC",
+    );
     expect(buildOrderByClause('bloom_desc')).toContain("WHEN 'AN' THEN 4");
+    expect(buildOrderByClause('topic_asc')).toContain('ORDER BY topic_code ASC');
+    expect(buildOrderByClause('topic_desc')).toContain('ORDER BY topic_code DESC');
     const { countSql, rowsSql } = buildQuestionQuery(['topics/BB_01.parquet'], {
       ...DEFAULT_FILTERS,
       sortBy: 'difficulty_desc',
@@ -159,5 +168,40 @@ describe('queryBuilder', () => {
     expect(keywordSql).toContain('AS kw_hits');
     expect(keywordSql).toContain('ORDER BY kw_hits DESC');
     expect(keywordSql).toContain('LIMIT 150');
+  });
+
+  it('filters by scoped ascpPaths and builds ascp_path facet queries', () => {
+    const shards = selectTargetShards(MOCK_MANIFEST, {
+      disciplines: [],
+      topicCodes: [],
+      ascpPaths: ['Blood Banking > Blood Group Systems > ABO'],
+    });
+    expect(shards.map((s) => s.shardId)).toEqual(['BB_01']);
+
+    const where = buildWhereClause({
+      ...DEFAULT_FILTERS,
+      ascpPaths: [
+        'Body Fluids > Cerebrospinal > Chemical Testing',
+        'Laboratory Operations > Safety > Programs/Practices',
+      ],
+    });
+    expect(where).toContain(
+      "(ascp_path = 'Body Fluids > Cerebrospinal > Chemical Testing' OR ascp_path LIKE 'Body Fluids > Cerebrospinal > Chemical Testing > %' ESCAPE '\\')",
+    );
+    expect(where).toContain(
+      "(ascp_path = 'Laboratory Operations > Safety > Programs/Practices' OR ascp_path LIKE 'Laboratory Operations > Safety > Programs/Practices > %' ESCAPE '\\')",
+    );
+
+    const facetSql = buildAscpPathFacetQuery(['topics/BB_01.parquet'], {
+      ...DEFAULT_FILTERS,
+      disciplines: ['CH'],
+      ascpPaths: ['Body Fluids > Cerebrospinal'],
+      bloomLevels: ['AP'],
+    });
+    expect(facetSql).toContain('GROUP BY topic_code, ascp_path');
+    expect(facetSql).toContain('ORDER BY topic_code ASC, MIN(taxonomic_code) ASC, ascp_path ASC');
+    expect(facetSql).toContain("bloom_level IN ('AP')");
+    expect(facetSql).not.toContain('discipline_code IN');
+    expect(facetSql).not.toContain('ascp_path =');
   });
 });

@@ -445,6 +445,84 @@ export function buildErrataDiffMarkdown(input: ErrataProposalInput): ErrataDiffS
   };
 }
 
+export interface VariantSubmissionInput {
+  sourceQuestion: QuestionRecord;
+  parentQuestionId: string;
+  remixedQuestion: QuestionRecord;
+  rationaleNote: string;
+  contributorRole: string;
+}
+
+export interface VariantSubmissionSummary {
+  suggestedTitle: string;
+  markdownBody: string;
+  variantJson: Record<string, unknown>;
+}
+
+export function buildVariantSubmissionMarkdown(
+  input: VariantSubmissionInput,
+): VariantSubmissionSummary {
+  const { sourceQuestion, parentQuestionId, remixedQuestion } = input;
+  const suggestedTitle = `[Question Variant] ${sourceQuestion.displayId} (${remixedQuestion.disciplineCode} / ${remixedQuestion.topicCode})`;
+
+  const variantJson: Record<string, unknown> = {
+    schema: 'mls-oer-question-variant-v1',
+    parentQuestionId,
+    remixedFromId: sourceQuestion.id,
+    remixedFromDisplayId: sourceQuestion.displayId,
+    contributor: input.contributorRole,
+    rationaleNote: input.rationaleNote.trim(),
+    question: remixedQuestion,
+  };
+
+  const optionLines = remixedQuestion.options.map((opt) => {
+    const marker = opt.weight === 100 ? '[x]' : '[ ]';
+    return `- ${marker} **${opt.label}.** ${opt.text}${opt.feedback ? `\n  - _Feedback:_ ${opt.feedback}` : ''}`;
+  });
+
+  const markdownBody = [
+    '### Community Question Variant / Remix Contribution',
+    `- **Parent Question ID:** \`${parentQuestionId}\``,
+    `- **Remixed From:** \`${sourceQuestion.displayId}\` (\`${sourceQuestion.id}\`)`,
+    `- **ASCP Path / Topic-Leaf:** ${remixedQuestion.ascpPath}`,
+    `- **Discipline / Topic:** ${remixedQuestion.disciplineCode} (${remixedQuestion.disciplineName}) / ${remixedQuestion.topicCode} (${remixedQuestion.topicName})`,
+    `- **Subtopic / Leaf:** ${remixedQuestion.ascpSubtopic} > ${remixedQuestion.leafTopic}`,
+    `- **Bloom Level / Difficulty:** ${remixedQuestion.bloomLevel} | ${remixedQuestion.difficulty} / 10`,
+    `- **Question Type:** ${remixedQuestion.questionType}`,
+    `- **Contributor:** ${input.contributorRole}`,
+    '',
+    '### Remix / Pedagogical Rationale',
+    input.rationaleNote.trim() || '_No additional rationale provided._',
+    '',
+    '### Learning Objective',
+    remixedQuestion.objective || '_None provided._',
+    '',
+    '### Question Stem',
+    remixedQuestion.questionText,
+    '',
+    '### Options',
+    ...optionLines,
+    '',
+    '### Hint & Difficulty Rationale',
+    `- **Hint:** ${remixedQuestion.hint || '_None_'}`,
+    `- **Difficulty Rationale:** ${remixedQuestion.difficultyRationale || '_None_'}`,
+    '',
+    '<details>',
+    '<summary>Structured Machine-Readable Variant JSON (<code>question-variant-v1</code>)</summary>',
+    '',
+    '```json',
+    JSON.stringify(variantJson, null, 2),
+    '```',
+    '</details>',
+  ].join('\n');
+
+  return {
+    suggestedTitle,
+    markdownBody,
+    variantJson,
+  };
+}
+
 export async function createGitHubIssue(
   token: string,
   params: {

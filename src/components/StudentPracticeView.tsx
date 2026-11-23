@@ -177,29 +177,32 @@ export function StudentPracticeView({
                 )}
               </div>
 
-              <p className="text-[15px] font-medium leading-relaxed text-slate-900">
+              <p className="text-[15px] font-medium leading-relaxed text-[var(--text-primary)]">
                 {q.questionText}
               </p>
 
               {!submitted && hintVisible && q.hint && (
-                <div className="rounded-lg border border-amber-200 bg-amber-50/70 px-3 py-2 text-xs text-amber-950">
+                <div className="rounded-lg border border-amber-200 dark:border-amber-800/70 bg-amber-50/70 dark:bg-amber-950/30 px-3 py-2 text-xs text-amber-950 dark:text-amber-200">
                   <strong>Hint:</strong> {q.hint}
                 </div>
               )}
 
-              <div className="space-y-2">
+              <div className="w-fit max-w-full space-y-2">
                 {q.options.map((opt) => {
                   const selected = chosen === opt.label;
                   const optionIsCorrect = opt.weight === 100;
 
-                  let styleClass = 'border-slate-200 bg-white text-slate-800 hover:bg-slate-50';
+                  let styleClass =
+                    'border-[var(--border-color)] bg-[var(--bg-surface)] text-[var(--text-primary)] hover:bg-[var(--cream-surface-soft)]';
                   if (!submitted && selected) {
                     styleClass =
-                      'border-indigo-500 bg-indigo-50/70 text-indigo-950 ring-1 ring-indigo-500';
+                      'border-indigo-500 bg-indigo-50/70 dark:bg-indigo-950/40 text-indigo-950 dark:text-indigo-200 ring-1 ring-indigo-500';
                   } else if (submitted && optionIsCorrect) {
-                    styleClass = 'border-emerald-300 bg-emerald-50/70 text-emerald-950';
+                    styleClass =
+                      'border-emerald-300 dark:border-emerald-700 bg-emerald-50/70 dark:bg-emerald-950/40 text-emerald-950 dark:text-emerald-200';
                   } else if (submitted && selected && !optionIsCorrect) {
-                    styleClass = 'border-rose-300 bg-rose-50/70 text-rose-950';
+                    styleClass =
+                      'border-rose-300 dark:border-rose-700 bg-rose-50/70 dark:bg-rose-950/40 text-rose-950 dark:text-rose-200';
                   }
 
                   return (
@@ -240,7 +243,7 @@ export function StudentPracticeView({
               </div>
 
               {submitted && (
-                <div className="pt-1 text-[11px] text-slate-500">
+                <div className="pt-1 text-[11px] text-[var(--text-secondary)]">
                   <strong>ASCP Path:</strong> {q.ascpPath}
                   {q.hint ? ` • Hint: ${q.hint}` : ''}
                 </div>
@@ -252,7 +255,7 @@ export function StudentPracticeView({
 
       {!submitted && questions.length > 0 && (
         <Card className="p-4 flex flex-wrap items-center justify-between gap-3">
-          <span className="text-xs text-slate-600">
+          <span className="text-xs text-[var(--text-secondary)]">
             {answeredCount === questions.length
               ? 'All questions answered — ready to submit.'
               : `${questions.length - answeredCount} question(s) still unanswered.`}

@@ -179,10 +179,19 @@ def load_guideline_mappings(mappings_dir: Path) -> GuidelineMappings:
                     entry_disc_code = tax_code.split("_", 1)[0]
                     entry_disc_name = DISCIPLINE_NAMES.get(entry_disc_code, entry_disc_code)
 
-                level2_name = segments[0]
-                ascp_subtopic = segments[1] if len(segments) >= 3 else segments[0]
-                leaf_topic = segments[-1]
-                ascp_path = " > ".join([entry_disc_name, *segments])
+                path_segments = (
+                    segments[1:]
+                    if segments[0].lower() == entry_disc_name.lower()
+                    else segments
+                )
+                if not path_segments:
+                    path_segments = segments
+                level2_name = path_segments[0]
+                ascp_subtopic = (
+                    path_segments[1] if len(path_segments) >= 3 else path_segments[0]
+                )
+                leaf_topic = path_segments[-1]
+                ascp_path = " > ".join([entry_disc_name, *path_segments])
 
                 entry = MappingEntry(
                     input_folder=input_folder,
@@ -230,6 +239,14 @@ def load_guideline_mappings(mappings_dir: Path) -> GuidelineMappings:
     return result
 
 
+_SHORT_CODE_RE = re.compile(r"^([A-Z]+_\d{2}-[A-Za-z0-9]+-\d{2}(?:-[a-z])?)")
+
+_EXTRA_CODE_ALIASES: dict[str, str] = {
+    "BF_02-A-00-g": "BF_02-A-00-f",
+    "BF_02-B-00-h": "BF_02-B-00-g",
+}
+
+
 def resolve_ascp_metadata(
     mappings: GuidelineMappings,
     source_line: str,
@@ -245,6 +262,18 @@ def resolve_ascp_metadata(
     tax_code = extract_taxonomic_code(cleaned_slug)
 
     entry = mappings.by_folder.get(cleaned_slug) or mappings.by_code.get(tax_code)
+    if entry is None and tax_code:
+        short_m = _SHORT_CODE_RE.match(tax_code)
+        if short_m:
+            short_code = short_m.group(1)
+            entry = mappings.by_code.get(short_code) or mappings.by_code.get(
+                _EXTRA_CODE_ALIASES.get(short_code, "")
+            )
+    if entry is None and not tax_code:
+        if "UABF_02-A-00-f" in fallback_leaf:
+            entry = mappings.by_code.get("BF_02-A-00-f")
+        elif fallback_leaf == "Quantitative Urinalysis":
+            entry = mappings.by_code.get("UA_01-A-00-b")
     if entry is not None:
         return entry.taxonomic_code, entry.ascp_subtopic, entry.leaf_topic, entry.ascp_path
 

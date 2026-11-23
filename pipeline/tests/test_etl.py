@@ -61,9 +61,9 @@ def test_parse_mappings_all_eight() -> None:
         fallback_leaf="Color Clarity",
     )
     assert tax_code == "UA_01-A-00-a"
-    assert subtopic == "Physical Examination"
-    assert leaf == "Color Clarity"
-    assert ascp_path == "Urinalysis > Urinalysis > Physical Examination > Color Clarity"
+    assert subtopic == "Physical"
+    assert leaf == "Color and Clarity"
+    assert ascp_path == "Urinalysis > Physical > Color and Clarity"
 
     bf_tax, bf_sub, bf_leaf, bf_path = resolve_ascp_metadata(
         mappings=mappings,
@@ -73,9 +73,9 @@ def test_parse_mappings_all_eight() -> None:
         fallback_leaf="Physiology",
     )
     assert bf_tax == "BF_02-A-00-a"
-    assert bf_sub == "Cerebrospinal Fluid (CSF)"
+    assert bf_sub == "Cerebrospinal"
     assert bf_leaf == "Physiology"
-    assert bf_path == "Body Fluids > Body Fluids > Cerebrospinal Fluid (CSF) > Physiology"
+    assert bf_path == "Body Fluids > Cerebrospinal > Physiology"
 
 
 def test_parse_md_splits_uabf_to_ua_and_bf(tmp_path: Path) -> None:
