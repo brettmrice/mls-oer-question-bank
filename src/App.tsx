@@ -121,7 +121,6 @@ export function App(): React.ReactElement {
   const [filters, setFilters] = useState<FilterState>(DEFAULT_FILTERS);
   const [questions, setQuestions] = useState<QuestionRecord[]>([]);
   const [totalCount, setTotalCount] = useState<number>(0);
-  const [shardsQueried, setShardsQueried] = useState<number>(0);
   const [avgLoadTimeMs, setAvgLoadTimeMs] = useState<number>(0);
   const loadTimeStatsRef = useRef<{ totalMs: number; count: number }>({ totalMs: 0, count: 0 });
   const recordLoadTime = useCallback((ms: number) => {
@@ -334,7 +333,6 @@ export function App(): React.ReactElement {
       querySeqRef.current += 1;
       setQuestions([]);
       setTotalCount(0);
-      setShardsQueried(0);
       setLoading(false);
       setQueryError(null);
       return;
@@ -348,7 +346,6 @@ export function App(): React.ReactElement {
         if (seq !== querySeqRef.current) return;
         setQuestions(res.items);
         setTotalCount(res.total);
-        setShardsQueried(res.shardsQueried);
         recordLoadTime(res.elapsedMs);
         setLoading(false);
       })
@@ -676,7 +673,6 @@ export function App(): React.ReactElement {
 
   const isBusy = isSemanticActive ? semanticLoading : loading;
   const totalPages = Math.max(1, Math.ceil(displayedTotal / filters.pageSize));
-  const targetShardCount = manifest ? selectTargetShards(manifest, filters).length : 0;
 
   if (manifestError) {
     return (

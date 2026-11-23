@@ -4,7 +4,6 @@ import mvp_worker from '@duckdb/duckdb-wasm/dist/duckdb-browser-mvp.worker.js?ur
 import duckdb_wasm_eh from '@duckdb/duckdb-wasm/dist/duckdb-eh.wasm?url';
 import eh_worker from '@duckdb/duckdb-wasm/dist/duckdb-browser-eh.worker.js?url';
 
-import { getAssetUrl } from '@/config/dataSource';
 import { getRemixedQuestionsByIds } from '@/lib/remixStore';
 import { loadOrFetchParquetShard } from '@/lib/shardCache';
 import {
