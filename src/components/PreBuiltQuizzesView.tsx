@@ -9,6 +9,7 @@ import {
   Search,
 } from 'lucide-react';
 import { BlueprintBalanceMeter } from '@/components/BlueprintBalanceMeter';
+import { FormattedText } from '@/components/FormattedText';
 import { QuizExportButtons } from '@/components/QuizExportButtons';
 import { Badge, Button, Card, Input, Skeleton } from '@/components/ui/primitives';
 import { fetchQuestionsByIds } from '@/lib/duckdb';
@@ -19,7 +20,7 @@ import {
   encodePrebuiltHashUrl,
   type PrebuiltSharePayload,
 } from '@/lib/prebuiltShare';
-import { BLOOM_META, cn, DISCIPLINE_COLORS } from '@/lib/utils';
+import { BLOOM_META, cn, DISCIPLINE_COLORS, formatAscpBreadcrumb } from '@/lib/utils';
 import type {
   ManifestData,
   PreBuiltQuizSummary,
@@ -400,10 +401,12 @@ export function PreBuiltQuizzesView({
                             {q.bloomLevel}
                           </Badge>
                           <span className="text-[11px] text-[var(--text-secondary)] truncate">
-                            {q.ascpPath}
+                            {formatAscpBreadcrumb(q.ascpPath)}
                           </span>
                         </div>
-                        <p className="text-sm text-[var(--text-primary)]">{q.questionText}</p>
+                        <p className="text-sm text-[var(--text-primary)]">
+                          <FormattedText text={q.questionText} />
+                        </p>
                       </div>
                     ))}
                   </div>

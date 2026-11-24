@@ -4,6 +4,7 @@ import { db } from '@/lib/db';
 import { clonePrebuiltToWorkspace } from '@/lib/prebuiltShare';
 import {
   addQuestionsToQuiz,
+  buildMarkQueryConstraint,
   createQuiz,
   deleteQuiz,
   duplicateQuiz,
@@ -11,12 +12,15 @@ import {
   getActiveQuizId,
   getBackupStatus,
   importWorkspaceBackupJson,
+  isQuestionMarked,
   listQuizzes,
+  NOTE_MAX_LENGTH,
   renameQuiz,
   reorderQuizQuestion,
   setQuestionPoints,
   swapQuizQuestion,
   toggleSavedQuestion,
+  updateQuestionMark,
 } from '@/lib/quizStore';
 
 describe('quizStore', () => {
@@ -99,5 +103,40 @@ describe('quizStore', () => {
     expect(remixed.remixedFrom?.title).toBe('Exit Exam 1');
     expect(remixed.remixedFrom?.author).toBe('Augusta University');
     expect(remixed.questionIds).toEqual(['q_x', 'q_y']);
+  });
+
+  it('manages question marks, note length limits, auto-cleanup, and filter constraints', async () => {
+    const longNote = 'x'.repeat(NOTE_MAX_LENGTH + 25);
+    const saved = await updateQuestionMark('q_1', {
+      rating: 'good',
+      personalNote: longNote,
+    });
+    expect(saved).not.toBeNull();
+    expect(saved?.personalNote.length).toBe(NOTE_MAX_LENGTH);
+    expect(isQuestionMarked(saved)).toBe(true);
+
+    const badRec = await updateQuestionMark('q_2', { rating: 'bad' });
+    expect(badRec?.rating).toBe('bad');
+
+    const map = new Map<string, NonNullable<typeof saved>>();
+    if (saved) map.set('q_1', saved);
+    if (badRec) map.set('q_2', badRec);
+
+    expect(buildMarkQueryConstraint([], map)).toBeUndefined();
+    expect(buildMarkQueryConstraint(['good'], map)).toEqual({
+      includeIds: ['q_1'],
+      includeUnmarked: false,
+      allMarkedIds: undefined,
+    });
+    expect(buildMarkQueryConstraint(['unmarked'], map)).toEqual({
+      includeIds: [],
+      includeUnmarked: true,
+      allMarkedIds: ['q_1', 'q_2'],
+    });
+
+    // Clearing all marks removes the record from IndexedDB
+    const cleared = await updateQuestionMark('q_1', { rating: null, personalNote: '' });
+    expect(cleared).toBeNull();
+    expect(await db.savedQuestions.get('q_1')).toBeUndefined();
   });
 });

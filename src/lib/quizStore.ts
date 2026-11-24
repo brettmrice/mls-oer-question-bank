@@ -1,9 +1,56 @@
 import {
   db,
+  type QuestionRating,
   type QuizRemixProvenance,
   type QuizWorkspaceRecord,
   type SavedQuestionRecord,
 } from '@/lib/db';
+import type { MarkFilterTag, MarkQueryConstraint } from '@/types/question';
+
+export const NOTE_MAX_LENGTH = 280;
+
+export function isQuestionMarked(record?: SavedQuestionRecord | null): boolean {
+  if (!record) return false;
+  return Boolean(
+    record.rating === 'good' ||
+      record.rating === 'bad' ||
+      record.personalNote.trim().length > 0,
+  );
+}
+
+export function buildMarkQueryConstraint(
+  selectedMarks: MarkFilterTag[],
+  savedById: Map<string, SavedQuestionRecord>,
+): MarkQueryConstraint | undefined {
+  if (selectedMarks.length === 0) {
+    return undefined;
+  }
+
+  const goodIds: string[] = [];
+  const badIds: string[] = [];
+  const noteIds: string[] = [];
+  const allMarkedIds: string[] = [];
+
+  for (const [id, rec] of savedById.entries()) {
+    if (!isQuestionMarked(rec)) continue;
+    allMarkedIds.push(id);
+    if (rec.rating === 'good') goodIds.push(id);
+    if (rec.rating === 'bad') badIds.push(id);
+    if (rec.personalNote.trim().length > 0) noteIds.push(id);
+  }
+
+  const includeSet = new Set<string>();
+  if (selectedMarks.includes('good')) goodIds.forEach((id) => includeSet.add(id));
+  if (selectedMarks.includes('bad')) badIds.forEach((id) => includeSet.add(id));
+  if (selectedMarks.includes('notes')) noteIds.forEach((id) => includeSet.add(id));
+
+  const includeUnmarked = selectedMarks.includes('unmarked');
+  return {
+    includeIds: Array.from(includeSet),
+    includeUnmarked,
+    allMarkedIds: includeUnmarked ? allMarkedIds : undefined,
+  };
+}
 
 export interface BackupStatus {
   unsyncedQuizCount: number;
@@ -272,8 +319,36 @@ export async function updateSavedNote(
   await db.savedQuestions.put({
     questionId,
     bookmarkedAt: existing?.bookmarkedAt ?? new Date().toISOString(),
-    personalNote,
+    personalNote: personalNote.slice(0, NOTE_MAX_LENGTH),
+    rating: existing?.rating ?? null,
   });
+}
+
+export async function updateQuestionMark(
+  questionId: string,
+  patch: {
+    rating?: QuestionRating | null;
+    personalNote?: string;
+  },
+): Promise<SavedQuestionRecord | null> {
+  const existing = await db.savedQuestions.get(questionId);
+  const next: SavedQuestionRecord = {
+    questionId,
+    bookmarkedAt: existing?.bookmarkedAt ?? new Date().toISOString(),
+    personalNote: (patch.personalNote !== undefined
+      ? patch.personalNote
+      : existing?.personalNote ?? ''
+    ).slice(0, NOTE_MAX_LENGTH),
+    rating: patch.rating !== undefined ? patch.rating : existing?.rating ?? null,
+  };
+
+  if (!isQuestionMarked(next)) {
+    await db.savedQuestions.delete(questionId);
+    return null;
+  }
+
+  await db.savedQuestions.put(next);
+  return next;
 }
 
 export async function getBackupStatus(): Promise<BackupStatus> {

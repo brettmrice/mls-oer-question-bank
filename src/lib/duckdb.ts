@@ -8,13 +8,18 @@ import { getRemixedQuestionsByIds } from '@/lib/remixStore';
 import { loadOrFetchParquetShard } from '@/lib/shardCache';
 import {
   buildAscpPathFacetQuery,
+  buildBloomFacetQuery,
   buildFacetQuery,
-  buildQuestionQuery,
+  buildOrderByClause,
+  buildQuestionsByIdsQuery,
   buildSemanticCandidateQueries,
+  buildVariantIndexQuery,
+  buildWhereClause,
   escapeSqlString,
   formatParquetSource,
   selectTargetShards,
 } from '@/lib/queryBuilder';
+import { groupVariantItems } from '@/lib/variantGrouping';
 import type {
   AscpPathFacet,
   FilterState,
@@ -121,6 +126,29 @@ function mapRowToQuestion(row: Record<string, unknown>): QuestionRecord {
   };
 }
 
+const MAX_VARIANT_INDEX_CACHE_ENTRIES = 12;
+const variantGroupIndexCache = new Map<string, string[]>();
+
+function getCachedVariantGroupIds(cacheKey: string): string[] | undefined {
+  const cached = variantGroupIndexCache.get(cacheKey);
+  if (!cached) return undefined;
+  variantGroupIndexCache.delete(cacheKey);
+  variantGroupIndexCache.set(cacheKey, cached);
+  return cached;
+}
+
+function setCachedVariantGroupIds(cacheKey: string, ids: string[]): void {
+  if (variantGroupIndexCache.has(cacheKey)) {
+    variantGroupIndexCache.delete(cacheKey);
+  } else if (variantGroupIndexCache.size >= MAX_VARIANT_INDEX_CACHE_ENTRIES) {
+    const oldestKey = variantGroupIndexCache.keys().next().value;
+    if (oldestKey !== undefined) {
+      variantGroupIndexCache.delete(oldestKey);
+    }
+  }
+  variantGroupIndexCache.set(cacheKey, ids);
+}
+
 export async function queryQuestions(
   manifest: ManifestData,
   filters: FilterState,
@@ -135,12 +163,34 @@ export async function queryQuestions(
   await ensureShardsRegistered(db, targetShards);
 
   const parquetPaths = targetShards.map((s) => s.parquet.path);
-  const { countSql, rowsSql } = buildQuestionQuery(parquetPaths, filters);
+  const cacheKey = JSON.stringify({
+    parquetPaths,
+    where: buildWhereClause(filters),
+    orderBy: buildOrderByClause(filters.sortBy),
+  });
 
-  const countTable = await conn.query(countSql);
-  const countRow = countTable.toArray()[0]?.toJSON() as Record<string, unknown> | undefined;
-  const total = Number(countRow?.total ?? 0);
+  let representativeIds = getCachedVariantGroupIds(cacheKey);
+  if (!representativeIds) {
+    const indexSql = buildVariantIndexQuery(parquetPaths, filters);
+    const indexTable = await conn.query(indexSql);
+    const indexRows = indexTable.toArray().map((r) => r.toJSON() as Record<string, unknown>);
 
+    const groupedRows = groupVariantItems(
+      indexRows,
+      (row) => String(row.id ?? ''),
+      (row) => {
+        const raw = row.similar_ids_json;
+        if (typeof raw !== 'string' || raw.length === 0 || raw === '[]') {
+          return [];
+        }
+        return safeParseJsonArray<string>(raw);
+      },
+    );
+    representativeIds = groupedRows.map((row) => String(row.id ?? ''));
+    setCachedVariantGroupIds(cacheKey, representativeIds);
+  }
+
+  const total = representativeIds.length;
   if (total === 0) {
     return {
       total: 0,
@@ -150,10 +200,30 @@ export async function queryQuestions(
     };
   }
 
+  const pageSize = Math.max(1, Math.min(200, Math.floor(filters.pageSize)));
+  const page = Math.max(1, Math.floor(filters.page));
+  const offset = (page - 1) * pageSize;
+  const pageIds = representativeIds.slice(offset, offset + pageSize);
+
+  if (pageIds.length === 0) {
+    return {
+      total,
+      items: [],
+      shardsQueried: targetShards.length,
+      elapsedMs: Math.round(performance.now() - start),
+    };
+  }
+
+  const rowsSql = buildQuestionsByIdsQuery(parquetPaths, pageIds);
   const rowsTable = await conn.query(rowsSql);
-  const items = rowsTable
-    .toArray()
-    .map((r) => mapRowToQuestion(r.toJSON() as Record<string, unknown>));
+  const byId = new Map<string, QuestionRecord>();
+  for (const r of rowsTable.toArray()) {
+    const q = mapRowToQuestion(r.toJSON() as Record<string, unknown>);
+    byId.set(q.id, q);
+  }
+  const items = pageIds
+    .map((id) => byId.get(id))
+    .filter((q): q is QuestionRecord => q !== undefined);
 
   return {
     total,
@@ -216,6 +286,29 @@ export async function queryAscpPathFacets(
       count: Number(obj.cnt ?? 0),
     };
   });
+}
+
+const BLOOM_LEVEL_ORDER = ['RE', 'UN', 'AP', 'AN'] as const;
+
+export async function queryAvailableBloomLevels(
+  shards: ShardManifest[],
+  filters: FilterState,
+): Promise<string[]> {
+  if (shards.length === 0) {
+    return [];
+  }
+  const { db, conn } = await getDuckDB();
+  await ensureShardsRegistered(db, shards);
+
+  const sql = buildBloomFacetQuery(
+    shards.map((s) => s.parquet.path),
+    filters,
+  );
+  const table = await conn.query(sql);
+  const present = new Set(
+    table.toArray().map((r) => String((r.toJSON() as Record<string, unknown>).bloom_level ?? '').trim()),
+  );
+  return BLOOM_LEVEL_ORDER.filter((code) => present.has(code));
 }
 
 export async function fetchQuestionsByIds(

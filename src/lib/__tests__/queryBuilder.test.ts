@@ -1,10 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildAscpPathFacetQuery,
+  buildBloomFacetQuery,
   buildFacetQuery,
   buildOrderByClause,
   buildQuestionQuery,
+  buildQuestionsByIdsQuery,
   buildSemanticCandidateQueries,
+  buildVariantIndexQuery,
   buildWhereClause,
   escapeSqlString,
   formatParquetSource,
@@ -203,5 +206,59 @@ describe('queryBuilder', () => {
     expect(facetSql).toContain("bloom_level IN ('AP')");
     expect(facetSql).not.toContain('discipline_code IN');
     expect(facetSql).not.toContain('ascp_path =');
+  });
+
+  it('builds Bloom facet query scoped to selected topics while ignoring non-topic filters', () => {
+    const sql = buildBloomFacetQuery(['topics/BB_01.parquet'], {
+      ...DEFAULT_FILTERS,
+      disciplines: ['BB'],
+      bloomLevels: ['AN'],
+      difficultyMin: 3,
+      difficultyMax: 8,
+      questionTypes: ['MCQ'],
+      keyword: 'antigen',
+    });
+    expect(sql).toContain('SELECT DISTINCT bloom_level');
+    expect(sql).toContain("discipline_code IN ('BB')");
+    expect(sql).not.toContain('bloom_level IN');
+    expect(sql).not.toContain('difficulty BETWEEN');
+    expect(sql).not.toContain('question_type IN');
+    expect(sql).not.toContain('ILIKE');
+  });
+
+  it('builds variant index and ID-batch queries for deduplicated paging', () => {
+    const indexSql = buildVariantIndexQuery(['topics/BB_01.parquet'], {
+      ...DEFAULT_FILTERS,
+      disciplines: ['BB'],
+      sortBy: 'difficulty_desc',
+    });
+    expect(indexSql).toContain('SELECT\n      id,\n      similar_ids_json');
+    expect(indexSql).toContain("discipline_code IN ('BB')");
+    expect(indexSql).toContain('ORDER BY difficulty DESC');
+    expect(indexSql).not.toContain('LIMIT');
+
+    const rowsSql = buildQuestionsByIdsQuery(['topics/BB_01.parquet'], ['q_1', "q_'2"]);
+    expect(rowsSql).toContain("WHERE id IN ('q_1', 'q_''2')");
+  });
+
+  it('applies markConstraint includeIds, excludeIds, and includeUnmarked in WHERE clause', () => {
+    const emptyInclude = buildWhereClause({
+      ...DEFAULT_FILTERS,
+      markConstraint: { includeIds: [], excludeIds: ['q_h'] },
+    });
+    expect(emptyInclude).toContain('1 = 0');
+    expect(emptyInclude).toContain("id NOT IN ('q_h')");
+
+    const goodOrUnmarked = buildWhereClause({
+      ...DEFAULT_FILTERS,
+      markConstraint: {
+        includeIds: ['q_1'],
+        includeUnmarked: true,
+        allMarkedIds: ['q_1', 'q_2'],
+        excludeIds: ['q_2'],
+      },
+    });
+    expect(goodOrUnmarked).toContain("(id IN ('q_1') OR id NOT IN ('q_1', 'q_2'))");
+    expect(goodOrUnmarked).toContain("id NOT IN ('q_2')");
   });
 });

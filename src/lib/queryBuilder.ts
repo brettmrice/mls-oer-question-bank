@@ -141,6 +141,39 @@ export function buildWhereClause(
     }
   }
 
+  const mc = filters.markConstraint;
+  if (mc) {
+    if (mc.includeUnmarked) {
+      const unmarkedClause =
+        mc.allMarkedIds && mc.allMarkedIds.length > 0
+          ? `id NOT IN (${mc.allMarkedIds.map((id) => `'${escapeSqlString(id)}'`).join(', ')})`
+          : null;
+      const includeClause =
+        mc.includeIds && mc.includeIds.length > 0
+          ? buildInClause('id', mc.includeIds)
+          : null;
+      if (includeClause && unmarkedClause) {
+        clauses.push(`(${includeClause} OR ${unmarkedClause})`);
+      } else if (unmarkedClause) {
+        clauses.push(unmarkedClause);
+      } else if (includeClause) {
+        clauses.push(includeClause);
+      }
+    } else if (mc.includeIds !== undefined) {
+      if (mc.includeIds.length === 0) {
+        clauses.push('1 = 0');
+      } else {
+        const inc = buildInClause('id', mc.includeIds);
+        if (inc) clauses.push(inc);
+      }
+    }
+
+    if (mc.excludeIds && mc.excludeIds.length > 0) {
+      const quoted = mc.excludeIds.map((id) => `'${escapeSqlString(id)}'`).join(', ');
+      clauses.push(`id NOT IN (${quoted})`);
+    }
+  }
+
   return clauses.length > 0 ? `WHERE ${clauses.join(' AND ')}` : '';
 }
 
@@ -212,6 +245,60 @@ export function buildQuestionQuery(
   return { countSql, rowsSql };
 }
 
+export function buildVariantIndexQuery(
+  parquetPaths: string[],
+  filters: FilterState,
+): string {
+  const source = formatParquetSource(parquetPaths);
+  const where = buildWhereClause(filters);
+  const orderBy = buildOrderByClause(filters.sortBy);
+  return `
+    SELECT
+      id,
+      similar_ids_json
+    FROM ${source}
+    ${where}
+    ${orderBy}
+  `.trim();
+}
+
+export function buildQuestionsByIdsQuery(
+  parquetPaths: string[],
+  ids: string[],
+): string {
+  if (ids.length === 0) {
+    throw new Error('At least one question ID is required');
+  }
+  const source = formatParquetSource(parquetPaths);
+  const inList = ids.map((id) => `'${escapeSqlString(id)}'`).join(', ');
+  return `
+    SELECT
+      id,
+      display_id,
+      discipline_code,
+      discipline_name,
+      topic_code,
+      topic_name,
+      taxonomic_code,
+      ascp_subtopic,
+      leaf_topic,
+      ascp_path,
+      subset_tags_json,
+      bloom_level,
+      difficulty,
+      difficulty_rationale,
+      question_type,
+      objective,
+      question_text,
+      options_json,
+      hint,
+      similar_ids_json,
+      source_files_json
+    FROM ${source}
+    WHERE id IN (${inList})
+  `.trim();
+}
+
 export function buildFacetQuery(parquetPaths: string[], filters: FilterState): string {
   const source = formatParquetSource(parquetPaths);
   const where = buildWhereClause(filters, { excludeHierarchySubLevels: true });
@@ -242,6 +329,25 @@ export function buildAscpPathFacetQuery(parquetPaths: string[], filters: FilterS
     ${where}
     GROUP BY topic_code, ascp_path
     ORDER BY topic_code ASC, MIN(taxonomic_code) ASC, ascp_path ASC
+  `.trim();
+}
+
+export function buildBloomFacetQuery(parquetPaths: string[], filters: FilterState): string {
+  const source = formatParquetSource(parquetPaths);
+  const topicOnlyFilters: FilterState = {
+    ...filters,
+    bloomLevels: [],
+    difficultyMin: 1,
+    difficultyMax: 10,
+    questionTypes: [],
+    subsetTags: [],
+    keyword: '',
+  };
+  const where = buildWhereClause(topicOnlyFilters);
+  return `
+    SELECT DISTINCT bloom_level
+    FROM ${source}
+    ${where}
   `.trim();
 }
 

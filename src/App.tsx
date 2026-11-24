@@ -11,7 +11,7 @@ import {
   X,
 } from 'lucide-react';
 import { FeedbackDrawer } from '@/components/FeedbackDrawer';
-import { FilterSidebar } from '@/components/FilterSidebar';
+import { FilterSidebar, TopicsFilterSummaryCard } from '@/components/FilterSidebar';
 import { Navbar } from '@/components/Navbar';
 import { PreBuiltQuizzesView } from '@/components/PreBuiltQuizzesView';
 import { QuestionCard } from '@/components/QuestionCard';
@@ -23,10 +23,16 @@ import { StudentPracticeView } from '@/components/StudentPracticeView';
 import { OverflowBlurScrollArea } from '@/components/ui/OverflowBlurScrollArea';
 import { Button, Card, Skeleton } from '@/components/ui/primitives';
 import { getDataBaseUrl } from '@/config/dataSource';
-import type { QuizWorkspaceRecord, RemixedQuestionRecord } from '@/lib/db';
+import type {
+  QuestionRating,
+  QuizWorkspaceRecord,
+  RemixedQuestionRecord,
+  SavedQuestionRecord,
+} from '@/lib/db';
 import {
   fetchQuestionsByIds,
   queryAscpPathFacets,
+  queryAvailableBloomLevels,
   queryQuestions,
 } from '@/lib/duckdb';
 import { fetchPrebuiltFromGist } from '@/lib/githubApi';
@@ -44,6 +50,7 @@ import {
 import { selectTargetShards } from '@/lib/queryBuilder';
 import {
   addQuestionsToQuiz,
+  buildMarkQueryConstraint,
   createQuiz,
   getActiveQuizId,
   getBackupStatus,
@@ -51,7 +58,7 @@ import {
   listSavedQuestions,
   removeQuestionFromQuiz,
   setActiveQuizId as persistActiveQuizId,
-  toggleSavedQuestion,
+  updateQuestionMark,
   type BackupStatus,
 } from '@/lib/quizStore';
 import { deleteRemixedQuestion, listAllRemixes } from '@/lib/remixStore';
@@ -95,10 +102,12 @@ export function App(): React.ReactElement {
   );
   const [quizManagerOpen, setQuizManagerOpen] = useState<boolean>(false);
 
-  // Phase 4: Multi-Quiz & Bookmark State (IndexedDB)
+  // Phase 4: Multi-Quiz & Marks State (IndexedDB)
   const [quizzes, setQuizzes] = useState<QuizWorkspaceRecord[]>([]);
   const [activeQuizId, setActiveQuizId] = useState<string | null>(null);
-  const [bookmarkedIds, setBookmarkedIds] = useState<Set<string>>(new Set());
+  const [savedMarksById, setSavedMarksById] = useState<Map<string, SavedQuestionRecord>>(
+    () => new Map(),
+  );
   const [backupStatus, setBackupStatus] = useState<BackupStatus | null>(null);
 
   // Pre-Built & Practice Routing State
@@ -122,17 +131,52 @@ export function App(): React.ReactElement {
   const [questions, setQuestions] = useState<QuestionRecord[]>([]);
   const [totalCount, setTotalCount] = useState<number>(0);
   const [avgLoadTimeMs, setAvgLoadTimeMs] = useState<number>(0);
-  const loadTimeStatsRef = useRef<{ totalMs: number; count: number }>({ totalMs: 0, count: 0 });
-  const recordLoadTime = useCallback((ms: number) => {
-    const stats = loadTimeStatsRef.current;
-    stats.totalMs += ms;
-    stats.count += 1;
-    setAvgLoadTimeMs(Math.round(stats.totalMs / stats.count));
+  const loadTimeHistoryRef = useRef<Array<{ ts: number; ms: number }>>([]);
+  const loadTimeTimerRef = useRef<number | null>(null);
+
+  const refreshLoadTimeAvg = useCallback(() => {
+    const cutoff = performance.now() - 2000;
+    const recent = loadTimeHistoryRef.current.filter((entry) => entry.ts >= cutoff);
+    loadTimeHistoryRef.current = recent;
+    if (recent.length === 0) {
+      setAvgLoadTimeMs(0);
+      if (loadTimeTimerRef.current !== null) {
+        window.clearInterval(loadTimeTimerRef.current);
+        loadTimeTimerRef.current = null;
+      }
+      return;
+    }
+    const sorted = recent.map((entry) => entry.ms).sort((a, b) => a - b);
+    const mid = Math.floor(sorted.length / 2);
+    const median =
+      sorted.length % 2 === 1 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+    setAvgLoadTimeMs(Math.round(median));
+  }, []);
+
+  const recordLoadTime = useCallback(
+    (ms: number) => {
+      loadTimeHistoryRef.current.push({ ts: performance.now(), ms });
+      refreshLoadTimeAvg();
+      if (loadTimeTimerRef.current === null) {
+        loadTimeTimerRef.current = window.setInterval(refreshLoadTimeAvg, 100);
+      }
+    },
+    [refreshLoadTimeAvg],
+  );
+
+  useEffect(() => {
+    return () => {
+      if (loadTimeTimerRef.current !== null) {
+        window.clearInterval(loadTimeTimerRef.current);
+        loadTimeTimerRef.current = null;
+      }
+    };
   }, []);
   const [loading, setLoading] = useState<boolean>(true);
   const [queryError, setQueryError] = useState<string | null>(null);
 
   const [ascpPathFacets, setAscpPathFacets] = useState<AscpPathFacet[]>([]);
+  const [availableBloomLevels, setAvailableBloomLevels] = useState<string[] | null>(null);
   const [requestedTopicCodes, setRequestedTopicCodes] = useState<string[]>([]);
   const [facetsLoading, setFacetsLoading] = useState<boolean>(false);
 
@@ -163,6 +207,7 @@ export function App(): React.ReactElement {
 
   const querySeqRef = useRef(0);
   const facetSeqRef = useRef(0);
+  const bloomSeqRef = useRef(0);
   const semanticSeqRef = useRef(0);
   const questionListRef = useRef<HTMLDivElement>(null);
   const questionCardRefs = useRef<Map<string, HTMLDivElement>>(new Map());
@@ -195,7 +240,7 @@ export function App(): React.ReactElement {
           ? storedActive
           : (quizList[0]?.id ?? null);
     setActiveQuizId(resolvedActive);
-    setBookmarkedIds(new Set(savedList.map((s) => s.questionId)));
+    setSavedMarksById(new Map(savedList.map((s) => [s.questionId, s])));
     setBackupStatus(status);
 
     const grouped: Record<string, RemixedQuestionRecord[]> = {};
@@ -327,6 +372,28 @@ export function App(): React.ReactElement {
     return () => window.removeEventListener('hashchange', handleHash);
   }, [manifest, showNotice]);
 
+  const markCounts = useMemo(() => {
+    let good = 0;
+    let bad = 0;
+    let notes = 0;
+    for (const rec of savedMarksById.values()) {
+      if (rec.rating === 'good') good += 1;
+      if (rec.rating === 'bad') bad += 1;
+      if (rec.personalNote.trim().length > 0) notes += 1;
+    }
+    return { good, bad, notes };
+  }, [savedMarksById]);
+
+  const markConstraint = useMemo(
+    () => buildMarkQueryConstraint(filters.marks, savedMarksById),
+    [filters.marks, savedMarksById],
+  );
+
+  const effectiveFilters = useMemo(
+    () => ({ ...filters, markConstraint }),
+    [filters, markConstraint],
+  );
+
   useEffect(() => {
     if (!manifest || isSemanticActive || activeView !== 'explore') return;
     if (showTopicSelectionPrompt) {
@@ -341,7 +408,7 @@ export function App(): React.ReactElement {
     setLoading(true);
     setQueryError(null);
 
-    queryQuestions(manifest, filters)
+    queryQuestions(manifest, effectiveFilters)
       .then((res) => {
         if (seq !== querySeqRef.current) return;
         setQuestions(res.items);
@@ -354,7 +421,7 @@ export function App(): React.ReactElement {
         setQueryError(err instanceof Error ? err.message : String(err));
         setLoading(false);
       });
-  }, [manifest, filters, isSemanticActive, activeView, showTopicSelectionPrompt]);
+  }, [manifest, effectiveFilters, isSemanticActive, activeView, showTopicSelectionPrompt]);
 
   const semanticFilterKey = useMemo(
     () =>
@@ -367,8 +434,10 @@ export function App(): React.ReactElement {
         difficultyMax: filters.difficultyMax,
         subsetTags: filters.subsetTags,
         questionTypes: filters.questionTypes,
+        marks: filters.marks,
+        markConstraint,
       }),
-    [filters],
+    [filters, markConstraint],
   );
 
   useEffect(() => {
@@ -377,7 +446,7 @@ export function App(): React.ReactElement {
     setSemanticLoading(true);
     setSemanticError(null);
 
-    runHybridSemanticSearch(manifest, semanticPrompt, activeSemanticShards, filters)
+    runHybridSemanticSearch(manifest, semanticPrompt, activeSemanticShards, effectiveFilters)
       .then((out) => {
         if (seq !== semanticSeqRef.current) return;
         setSemanticResults(out.items);
@@ -463,6 +532,67 @@ export function App(): React.ReactElement {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [manifest, facetKey]);
 
+  const bloomScopeKey = useMemo(
+    () =>
+      JSON.stringify({
+        disciplines: filters.disciplines,
+        topicCodes: filters.topicCodes,
+        ascpPaths: filters.ascpPaths,
+        subtopics: filters.subtopics,
+        leafTopics: filters.leafTopics,
+      }),
+    [
+      filters.disciplines,
+      filters.topicCodes,
+      filters.ascpPaths,
+      filters.subtopics,
+      filters.leafTopics,
+    ],
+  );
+
+  useEffect(() => {
+    if (!manifest) return;
+    const hasTopicScope =
+      filters.disciplines.length > 0 ||
+      filters.topicCodes.length > 0 ||
+      filters.ascpPaths.length > 0;
+    if (!hasTopicScope) {
+      bloomSeqRef.current += 1;
+      setAvailableBloomLevels(null);
+      setFilters((prev) =>
+        prev.bloomLevels.length === 0 ? prev : { ...prev, bloomLevels: [], page: 1 },
+      );
+      return;
+    }
+
+    const targetShards = selectTargetShards(manifest, filters);
+    if (targetShards.length === 0) {
+      bloomSeqRef.current += 1;
+      setAvailableBloomLevels([]);
+      setFilters((prev) =>
+        prev.bloomLevels.length === 0 ? prev : { ...prev, bloomLevels: [], page: 1 },
+      );
+      return;
+    }
+
+    const seq = ++bloomSeqRef.current;
+    queryAvailableBloomLevels(targetShards, filters)
+      .then((presentLevels) => {
+        if (seq !== bloomSeqRef.current) return;
+        setAvailableBloomLevels(presentLevels);
+        setFilters((prev) => ({
+          ...prev,
+          bloomLevels: presentLevels,
+          page: 1,
+        }));
+      })
+      .catch(() => {
+        if (seq !== bloomSeqRef.current) return;
+        setAvailableBloomLevels(null);
+      });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [manifest, bloomScopeKey]);
+
   const updateFilters = useCallback((patch: Partial<FilterState>) => {
     setFilters((prev) => ({ ...prev, ...patch }));
   }, []);
@@ -534,16 +664,40 @@ export function App(): React.ReactElement {
     [refreshWorkspace, showNotice],
   );
 
-  const handleToggleBookmark = useCallback(
-    async (questionId: string) => {
-      const nowSaved = await toggleSavedQuestion(questionId);
+  const handleUpdateMark = useCallback(
+    async (
+      questionId: string,
+      patch: { rating?: QuestionRating | null; personalNote?: string },
+    ) => {
+      const updated = await updateQuestionMark(questionId, patch);
+      setSavedMarksById((prev) => {
+        const next = new Map(prev);
+        if (updated) {
+          next.set(questionId, updated);
+        } else {
+          next.delete(questionId);
+        }
+        return next;
+      });
       await refreshWorkspace();
-      showNotice(nowSaved ? 'Bookmarked question locally.' : 'Removed bookmark.');
     },
-    [refreshWorkspace, showNotice],
+    [refreshWorkspace],
   );
 
   const displayedTotal = isSemanticActive ? semanticResults.length : totalCount;
+  const loadedQuestionCount = useMemo(() => {
+    if (!manifest || showTopicSelectionPrompt) return 0;
+    if (isSemanticActive) {
+      const activeSet = new Set(activeSemanticShards);
+      return manifest.shards
+        .filter((s) => activeSet.has(s.shardId))
+        .reduce((sum, s) => sum + s.questionCount, 0);
+    }
+    return selectTargetShards(manifest, filters).reduce(
+      (sum, s) => sum + s.questionCount,
+      0,
+    );
+  }, [manifest, showTopicSelectionPrompt, isSemanticActive, activeSemanticShards, filters]);
   const displayedItems = useMemo(() => {
     if (isSemanticActive) {
       const start = (filters.page - 1) * filters.pageSize;
@@ -783,42 +937,54 @@ export function App(): React.ReactElement {
       ) : (
         <div className="mx-auto flex min-h-0 w-full max-w-[1600px] flex-1 gap-6 px-4 py-6 sm:px-6">
           {/* Desktop Sidebar */}
-          <OverflowBlurScrollArea
-            className="hidden w-80 shrink-0 lg:block lg:h-full"
-            scrollClassName="lg:pr-1"
-          >
+          <div className="hidden w-80 shrink-0 lg:flex lg:h-full lg:flex-col lg:gap-4">
             {manifest ? (
-              <FilterSidebar
-                manifest={manifest}
-                filters={filters}
-                ascpPathFacets={ascpPathFacets}
-                facetsLoading={facetsLoading}
-                onEnsureTopicFacets={ensureTopicFacets}
-                activeSemanticShards={activeSemanticShards}
-                semanticPrompt={semanticPrompt}
-                semanticLoading={semanticLoading}
+              <TopicsFilterSummaryCard
+                totalQuestions={manifest.totalQuestions}
+                loadedCount={loadedQuestionCount}
                 selectedCount={showTopicSelectionPrompt ? 0 : displayedTotal}
                 loadTimeMs={avgLoadTimeMs}
-                onUpdateFilters={updateFilters}
-                onResetFilters={resetFilters}
-                onOpenSemanticModal={() => openSemanticModal()}
-                onSubmitSemanticPrompt={(prompt) => {
-                  setSemanticPrompt(prompt);
-                  updateFilters({ page: 1 });
-                }}
-                onClearSemanticPrompt={() => {
-                  setSemanticPrompt('');
-                  setSemanticResults([]);
-                  setSemanticMeta(null);
-                }}
               />
             ) : (
-              <div className="space-y-4">
-                <Skeleton className="h-44 w-full" />
-                <Skeleton className="h-96 w-full" />
-              </div>
+              <Skeleton className="h-24 w-full shrink-0" />
             )}
-          </OverflowBlurScrollArea>
+            <OverflowBlurScrollArea
+              className="min-h-0 flex-1"
+              scrollClassName="lg:pr-1"
+            >
+              {manifest ? (
+                <FilterSidebar
+                  manifest={manifest}
+                  filters={filters}
+                  ascpPathFacets={ascpPathFacets}
+                  availableBloomLevels={availableBloomLevels}
+                  markCounts={markCounts}
+                  facetsLoading={facetsLoading}
+                  onEnsureTopicFacets={ensureTopicFacets}
+                  activeSemanticShards={activeSemanticShards}
+                  semanticPrompt={semanticPrompt}
+                  semanticLoading={semanticLoading}
+                  onUpdateFilters={updateFilters}
+                  onResetFilters={resetFilters}
+                  onOpenSemanticModal={() => openSemanticModal()}
+                  onSubmitSemanticPrompt={(prompt) => {
+                    setSemanticPrompt(prompt);
+                    updateFilters({ page: 1 });
+                  }}
+                  onClearSemanticPrompt={() => {
+                    setSemanticPrompt('');
+                    setSemanticResults([]);
+                    setSemanticMeta(null);
+                  }}
+                />
+              ) : (
+                <div className="space-y-4">
+                  <Skeleton className="h-44 w-full" />
+                  <Skeleton className="h-96 w-full" />
+                </div>
+              )}
+            </OverflowBlurScrollArea>
+          </div>
 
           {/* Mobile Filter Drawer */}
           {mobileFiltersOpen && manifest && (
@@ -838,35 +1004,45 @@ export function App(): React.ReactElement {
                     <X className="h-4 w-4" />
                   </Button>
                 </div>
-                <OverflowBlurScrollArea className="flex-1 min-h-0" contentClassName="px-4 pb-4">
-                  <FilterSidebar
-                    manifest={manifest}
-                    filters={filters}
-                    ascpPathFacets={ascpPathFacets}
-                    facetsLoading={facetsLoading}
-                    onEnsureTopicFacets={ensureTopicFacets}
-                    activeSemanticShards={activeSemanticShards}
-                    semanticPrompt={semanticPrompt}
-                    semanticLoading={semanticLoading}
-                    selectedCount={showTopicSelectionPrompt ? 0 : displayedTotal}
-                    loadTimeMs={avgLoadTimeMs}
-                    onUpdateFilters={updateFilters}
-                    onResetFilters={resetFilters}
-                    onOpenSemanticModal={() => {
-                      setMobileFiltersOpen(false);
-                      openSemanticModal();
-                    }}
-                    onSubmitSemanticPrompt={(prompt) => {
-                      setSemanticPrompt(prompt);
-                      updateFilters({ page: 1 });
-                    }}
-                    onClearSemanticPrompt={() => {
-                      setSemanticPrompt('');
-                      setSemanticResults([]);
-                      setSemanticMeta(null);
-                    }}
-                  />
-                </OverflowBlurScrollArea>
+                <div className="flex min-h-0 flex-1 flex-col gap-4">
+                  <div className="shrink-0 px-4">
+                    <TopicsFilterSummaryCard
+                      totalQuestions={manifest.totalQuestions}
+                      loadedCount={loadedQuestionCount}
+                      selectedCount={showTopicSelectionPrompt ? 0 : displayedTotal}
+                      loadTimeMs={avgLoadTimeMs}
+                    />
+                  </div>
+                  <OverflowBlurScrollArea className="flex-1 min-h-0" contentClassName="px-4 pb-4">
+                    <FilterSidebar
+                      manifest={manifest}
+                      filters={filters}
+                      ascpPathFacets={ascpPathFacets}
+                      availableBloomLevels={availableBloomLevels}
+                      markCounts={markCounts}
+                      facetsLoading={facetsLoading}
+                      onEnsureTopicFacets={ensureTopicFacets}
+                      activeSemanticShards={activeSemanticShards}
+                      semanticPrompt={semanticPrompt}
+                      semanticLoading={semanticLoading}
+                      onUpdateFilters={updateFilters}
+                      onResetFilters={resetFilters}
+                      onOpenSemanticModal={() => {
+                        setMobileFiltersOpen(false);
+                        openSemanticModal();
+                      }}
+                      onSubmitSemanticPrompt={(prompt) => {
+                        setSemanticPrompt(prompt);
+                        updateFilters({ page: 1 });
+                      }}
+                      onClearSemanticPrompt={() => {
+                        setSemanticPrompt('');
+                        setSemanticResults([]);
+                        setSemanticMeta(null);
+                      }}
+                    />
+                  </OverflowBlurScrollArea>
+                </div>
               </div>
             </div>
           )}
@@ -1095,14 +1271,15 @@ export function App(): React.ReactElement {
                       semanticMatch={semanticMatch}
                       quizzes={quizzes}
                       activeQuizId={activeQuiz?.id ?? null}
-                      isBookmarked={bookmarkedIds.has(question.id)}
+                      mark={savedMarksById.get(question.id) ?? null}
+                      getMark={(id) => savedMarksById.get(id) ?? null}
                       isFocused={
                         focusedQuestionId ? focusedQuestionId === question.id : undefined
                       }
                       onAddToQuiz={handleAddToQuiz}
                       onRemoveFromQuiz={handleRemoveFromQuiz}
                       onQuickCreateAndAdd={handleQuickCreateAndAdd}
-                      onToggleBookmark={handleToggleBookmark}
+                      onUpdateMark={handleUpdateMark}
                       onSuggestCorrection={setErrataQuestion}
                       localRemixes={remixesByParent[question.id] ?? []}
                       onOpenRemix={(sourceQuestion, parentQuestionId, editingRemix) =>

@@ -2,6 +2,7 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { QuestionCard } from '@/components/QuestionCard';
+import { buildCompactHeaderSteps } from '@/lib/utils';
 import type { QuestionRecord } from '@/types/question';
 
 const SAMPLE_QUESTION: QuestionRecord = {
@@ -274,5 +275,131 @@ describe('QuestionCard', () => {
     expect(hideAllBtn).toBeInTheDocument();
     await user.click(hideAllBtn);
     expect(onToggleGlobalReveal).toHaveBeenCalledTimes(2);
+  });
+
+  it('strips leading "Clinical " from the ASCP breadcrumb', () => {
+    render(
+      <QuestionCard
+        question={{
+          ...SAMPLE_QUESTION,
+          ascpPath: 'Clinical Chemistry > General Chemistry > Carbohydrates > Properties',
+        }}
+        globalReveal={false}
+      />,
+    );
+
+    expect(
+      screen.getByText('Chemistry > General Chemistry > Carbohydrates > Properties'),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText('Clinical Chemistry > General Chemistry > Carbohydrates > Properties'),
+    ).not.toBeInTheDocument();
+  });
+
+  it('builds progressive header compaction steps preserving the leaf and compacting bloom/difficulty', () => {
+    const steps = buildCompactHeaderSteps(
+      'Clinical Microbiology > Preanalytic Procedures > Specimen Processing, Media Selection, and Staining Procedures > Digestion Decontamination',
+      'MI',
+      'Analyze',
+      'AN',
+      3,
+    );
+
+    expect(steps).toEqual([
+      {
+        breadcrumb:
+          'Microbiology > Preanalytic Procedures > Specimen Processing, Media Selection, and Staining Procedures > Digestion Decontamination',
+        meta: 'BLOOM: Analyze | DIFFICULTY: 3 / 10',
+      },
+      {
+        breadcrumb: 'Microbiology > Preanalytic Procedures > ... > Digestion Decontamination',
+        meta: 'BLOOM: Analyze | DIFFICULTY: 3 / 10',
+      },
+      {
+        breadcrumb: 'Microbiology > ... > Digestion Decontamination',
+        meta: 'BLOOM: Analyze | DIFFICULTY: 3 / 10',
+      },
+      {
+        breadcrumb: 'Microbiology > ... > Digestion Decontamination',
+        meta: 'BL: AN | DIFF: 3 / 10',
+      },
+      {
+        breadcrumb: 'MI > ... > Digestion Decontamination',
+        meta: 'BL: AN | DIFF: 3 / 10',
+      },
+      {
+        breadcrumb: 'MI > ... > Digestion Decontamination',
+        meta: 'AN | 3 / 10',
+      },
+    ]);
+  });
+
+  it('compacts QuestionCard header based on row width and wraps at ultra-narrow widths to keep leaf visible', () => {
+    const origGetBCR = HTMLElement.prototype.getBoundingClientRect;
+
+    HTMLElement.prototype.getBoundingClientRect = function () {
+      return {
+        width: 420,
+        height: 20,
+        top: 0,
+        left: 0,
+        right: 420,
+        bottom: 20,
+        x: 0,
+        y: 0,
+        toJSON: () => ({}),
+      };
+    };
+
+    try {
+      const { rerender } = render(
+        <QuestionCard
+          question={{
+            ...SAMPLE_QUESTION,
+            disciplineCode: 'MI',
+            ascpPath:
+              'Clinical Microbiology > Preanalytic Procedures > Specimen Processing > Digestion Decontamination',
+          }}
+          globalReveal={false}
+        />,
+      );
+
+      expect(screen.getByText('MI > ... > Digestion Decontamination')).toBeInTheDocument();
+      expect(screen.getByText('BL: AN | DIFF: 6 / 10')).toBeInTheDocument();
+
+      HTMLElement.prototype.getBoundingClientRect = function () {
+        return {
+          width: 180,
+          height: 20,
+          top: 0,
+          left: 0,
+          right: 180,
+          bottom: 20,
+          x: 0,
+          y: 0,
+          toJSON: () => ({}),
+        };
+      };
+
+      rerender(
+        <QuestionCard
+          question={{
+            ...SAMPLE_QUESTION,
+            id: 'q_narrow_test',
+            disciplineCode: 'MI',
+            ascpPath:
+              'Clinical Microbiology > Preanalytic Procedures > Specimen Processing > Digestion Decontamination',
+          }}
+          globalReveal={false}
+        />,
+      );
+
+      const leafEl = screen.getByText('MI > ... > Digestion Decontamination');
+      expect(leafEl).toBeInTheDocument();
+      expect(leafEl).not.toHaveClass('truncate');
+      expect(screen.getByText('AN | 6 / 10')).toBeInTheDocument();
+    } finally {
+      HTMLElement.prototype.getBoundingClientRect = origGetBCR;
+    }
   });
 });

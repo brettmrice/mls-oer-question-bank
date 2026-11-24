@@ -117,6 +117,15 @@ export type SortOption =
   | 'topic_asc'
   | 'topic_desc';
 
+export type MarkFilterTag = 'good' | 'bad' | 'notes' | 'unmarked';
+
+export interface MarkQueryConstraint {
+  includeIds?: string[];
+  includeUnmarked?: boolean;
+  allMarkedIds?: string[];
+  excludeIds?: string[];
+}
+
 export interface FilterState {
   disciplines: string[];
   topicCodes: string[];
@@ -128,6 +137,8 @@ export interface FilterState {
   difficultyMax: number;
   subsetTags: string[];
   questionTypes: string[];
+  marks: MarkFilterTag[];
+  markConstraint?: MarkQueryConstraint;
   keyword: string;
   sortBy: SortOption;
   page: number;
@@ -157,6 +168,7 @@ export const DEFAULT_FILTERS: FilterState = {
   difficultyMax: 10,
   subsetTags: [],
   questionTypes: [],
+  marks: [],
   keyword: '',
   sortBy: 'difficulty_asc',
   page: 1,

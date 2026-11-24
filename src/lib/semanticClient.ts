@@ -1,4 +1,5 @@
 import { querySemanticCandidates } from '@/lib/duckdb';
+import { groupVariantItems } from '@/lib/variantGrouping';
 import {
   computeHybridRrfRanking,
   extractClinicalQueryTokens,
@@ -432,7 +433,12 @@ export async function runHybridSemanticSearch(
     clinicalTokens,
   );
 
-  const items = computeHybridRrfRanking(candidates, query, workerResult.denseHits, 60);
+  const rankedItems = computeHybridRrfRanking(candidates, query, workerResult.denseHits, 60);
+  const items = groupVariantItems(
+    rankedItems,
+    (item) => item.question.id,
+    (item) => item.question.similarIds,
+  );
   return {
     items,
     centroidSuggestions: workerResult.centroidSuggestions,

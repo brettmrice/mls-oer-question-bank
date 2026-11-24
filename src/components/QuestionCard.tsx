@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import {
   Bookmark,
   Check,
@@ -11,12 +11,29 @@ import {
   Lightbulb,
   Pencil,
   Plus,
+  StickyNote,
+  ThumbsDown,
+  ThumbsUp,
   Trash2,
+  X,
 } from 'lucide-react';
+import { FormattedText } from '@/components/FormattedText';
 import { Button, Card } from '@/components/ui/primitives';
-import type { QuizWorkspaceRecord, RemixedQuestionRecord } from '@/lib/db';
+import type {
+  QuestionRating,
+  QuizWorkspaceRecord,
+  RemixedQuestionRecord,
+  SavedQuestionRecord,
+} from '@/lib/db';
+import { NOTE_MAX_LENGTH, isQuestionMarked } from '@/lib/quizStore';
 import { fetchQuestionsByIds } from '@/lib/duckdb';
-import { BLOOM_META, cn } from '@/lib/utils';
+import {
+  BLOOM_META,
+  buildCompactHeaderSteps,
+  cn,
+  formatAscpBreadcrumb,
+  selectCompactHeaderStep,
+} from '@/lib/utils';
 import type { ManifestData, QuestionRecord } from '@/types/question';
 
 export interface QuestionCardProps {
@@ -30,12 +47,16 @@ export interface QuestionCardProps {
   };
   quizzes?: QuizWorkspaceRecord[];
   activeQuizId?: string | null;
-  isBookmarked?: boolean;
+  mark?: SavedQuestionRecord | null;
+  getMark?: (questionId: string) => SavedQuestionRecord | null;
+  onUpdateMark?: (
+    questionId: string,
+    patch: { rating?: QuestionRating | null; personalNote?: string },
+  ) => void;
   onLoadVariants?: (question: QuestionRecord) => Promise<QuestionRecord[]>;
   onAddToQuiz?: (quizId: string, questionId: string) => void;
   onRemoveFromQuiz?: (quizId: string, questionId: string) => void;
   onQuickCreateAndAdd?: (questionId: string) => void;
-  onToggleBookmark?: (questionId: string) => void;
   onSuggestCorrection?: (question: QuestionRecord) => void;
   localRemixes?: RemixedQuestionRecord[];
   onOpenRemix?: (
@@ -51,6 +72,90 @@ export interface QuestionCardProps {
 
 const SLIDE_DURATION_MS = 450;
 
+function QuestionCardHeader({ q }: { q: QuestionRecord }): React.ReactElement {
+  const qBloom = BLOOM_META[q.bloomLevel] ?? {
+    label: q.bloomLevel,
+    short: q.bloomLevel,
+    className: 'bg-[var(--bg-primary)] text-[var(--text-primary)] border-[var(--border-color)]',
+  };
+  const steps = buildCompactHeaderSteps(
+    q.ascpPath,
+    q.disciplineCode,
+    qBloom.label,
+    qBloom.short,
+    q.difficulty,
+  );
+  const [rowWidth, setRowWidth] = useState<number | null>(null);
+  const rowRef = useRef<HTMLDivElement | null>(null);
+  const breadcrumbRef = useRef<HTMLSpanElement | null>(null);
+  const metaRef = useRef<HTMLSpanElement | null>(null);
+
+  useLayoutEffect(() => {
+    const row = rowRef.current;
+    if (!row) return;
+    const updateWidth = () => {
+      const nextWidth = row.getBoundingClientRect().width;
+      if (nextWidth > 0) {
+        setRowWidth(nextWidth);
+      }
+    };
+    updateWidth();
+    if (typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver((entries) => {
+      const width = entries[0]?.contentRect.width ?? row.getBoundingClientRect().width;
+      if (width > 0) {
+        setRowWidth(width);
+      }
+    });
+    observer.observe(row);
+    return () => observer.disconnect();
+  }, []);
+
+  let stepIndex = 0;
+  let wraps = false;
+  if (rowWidth !== null && rowWidth > 0) {
+    const breadcrumbFont =
+      (breadcrumbRef.current && getComputedStyle(breadcrumbRef.current).font) ||
+      '500 12px system-ui, sans-serif';
+    const metaFont =
+      (metaRef.current && getComputedStyle(metaRef.current).font) ||
+      '600 11px ui-monospace, monospace';
+    const result = selectCompactHeaderStep(steps, rowWidth, breadcrumbFont, metaFont);
+    stepIndex = result.stepIndex;
+    wraps = result.wraps;
+  }
+
+  const activeStep = steps[stepIndex];
+
+  return (
+    <div
+      ref={rowRef}
+      className={cn(
+        'flex items-center justify-between gap-2 text-xs text-[var(--text-secondary)]',
+        wraps ? 'flex-wrap' : 'flex-nowrap',
+      )}
+    >
+      <span
+        ref={breadcrumbRef}
+        title={formatAscpBreadcrumb(q.ascpPath)}
+        className={cn(
+          'min-w-0 font-medium text-[var(--text-secondary)]',
+          !wraps && 'truncate',
+        )}
+      >
+        {activeStep.breadcrumb}
+      </span>
+      <span
+        ref={metaRef}
+        title={`BLOOM: ${qBloom.label} | DIFFICULTY: ${q.difficulty} / 10`}
+        className="shrink-0 font-mono text-[11px] font-semibold uppercase tracking-wide text-[var(--text-secondary)]"
+      >
+        {activeStep.meta}
+      </span>
+    </div>
+  );
+}
+
 export function QuestionCard({
   question,
   manifest = null,
@@ -58,12 +163,13 @@ export function QuestionCard({
   onToggleGlobalReveal,
   quizzes = [],
   activeQuizId = null,
-  isBookmarked = false,
+  mark = null,
+  getMark,
+  onUpdateMark,
   onLoadVariants,
   onAddToQuiz,
   onRemoveFromQuiz,
   onQuickCreateAndAdd,
-  onToggleBookmark,
   onSuggestCorrection,
   localRemixes = [],
   onOpenRemix,
@@ -72,6 +178,9 @@ export function QuestionCard({
   isFocused,
 }: QuestionCardProps): React.ReactElement {
   const [variantsOpen, setVariantsOpen] = useState(false);
+  const [markOpen, setMarkOpen] = useState(false);
+  const [notesOpen, setNotesOpen] = useState(false);
+  const [noteDraft, setNoteDraft] = useState(mark?.personalNote ?? '');
   const [localReveal, setLocalReveal] = useState<boolean>(globalReveal);
   const [variants, setVariants] = useState<QuestionRecord[]>([question]);
   const [variantsLoaded, setVariantsLoaded] = useState(false);
@@ -101,8 +210,12 @@ export function QuestionCard({
     setExitingQuestion(null);
     setSlideDirection(null);
     setVariantsOpen(false);
+    setMarkOpen(false);
+    setNotesOpen(false);
     return clearExitTimer;
-  }, [question]);
+    // Only reset card UI state when the underlying question ID changes, not on re-query object identity changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [question.id]);
 
   const totalVariants = 1 + question.similarIds.length;
   const totalCount = totalVariants + localRemixes.length;
@@ -120,6 +233,25 @@ export function QuestionCard({
     activeVariantIndex >= remixStartIndex
       ? localRemixes[activeVariantIndex - remixStartIndex] ?? null
       : null;
+
+  const activeMark = getMark ? getMark(activeQuestion.id) : mark;
+  const isMarked = isQuestionMarked(activeMark);
+  const savedNote = activeMark?.personalNote ?? '';
+
+  useEffect(() => {
+    setNoteDraft(savedNote);
+    if (savedNote.trim().length > 0) {
+      setNotesOpen(true);
+    }
+  }, [activeQuestion.id, savedNote]);
+
+  const commitNoteDraft = () => {
+    if (!onUpdateMark) return;
+    const trimmed = noteDraft.slice(0, NOTE_MAX_LENGTH);
+    if (trimmed !== savedNote) {
+      onUpdateMark(activeQuestion.id, { personalNote: trimmed });
+    }
+  };
 
   useEffect(() => {
     if (activeVariantIndex >= totalCount) {
@@ -189,27 +321,20 @@ export function QuestionCard({
   };
 
   const renderQuestionContent = (q: QuestionRecord) => {
-    const qBloom = BLOOM_META[q.bloomLevel] ?? {
-      label: q.bloomLevel,
-      short: q.bloomLevel,
-      className: 'bg-[var(--bg-primary)] text-[var(--text-primary)] border-[var(--border-color)]',
-    };
     const showInfoBox =
       localReveal && Boolean(q.objective || q.hint || q.difficultyRationale);
 
     return (
       <>
         {/* Top Row: ASCP Path (left) & Bloom / Difficulty (right) */}
-        <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-[var(--text-secondary)]">
-          <span className="min-w-0 truncate font-medium text-[var(--text-secondary)]">{q.ascpPath}</span>
-          <span className="shrink-0 font-mono text-[11px] font-semibold uppercase tracking-wide text-[var(--text-secondary)]">
-            BLOOM: {qBloom.label} | DIFFICULTY: {q.difficulty} / 10
-          </span>
-        </div>
+        <QuestionCardHeader
+          key={`${q.id}-${q.ascpPath}-${q.bloomLevel}-${q.difficulty}`}
+          q={q}
+        />
 
         {/* Question Text */}
         <p className="mt-2.5 text-[15px] font-medium leading-relaxed text-[var(--text-primary)]">
-          {q.questionText}
+          <FormattedText text={q.questionText} />
         </p>
 
         {/* Options */}
@@ -249,7 +374,9 @@ export function QuestionCard({
                 </div>
 
                 <div className="min-w-0 flex-1 px-3 py-2">
-                  <div className="leading-snug">{opt.text}</div>
+                  <div className="leading-snug">
+                    <FormattedText text={opt.text} />
+                  </div>
                   {localReveal && opt.feedback && (
                     <p
                       className={cn(
@@ -259,7 +386,7 @@ export function QuestionCard({
                           : 'text-[var(--text-secondary)]',
                       )}
                     >
-                      {opt.feedback}
+                      <FormattedText text={opt.feedback} />
                     </p>
                   )}
                 </div>
@@ -278,18 +405,19 @@ export function QuestionCard({
               {q.objective && (
                 <p className="text-[var(--text-primary)]">
                   <strong className="font-semibold text-[var(--text-primary)]">Objective:</strong>{' '}
-                  {q.objective}
+                  <FormattedText text={q.objective} />
                 </p>
               )}
               {localReveal && q.hint && (
                 <p>
-                  <strong className="font-semibold text-[var(--text-primary)]">Hint:</strong> {q.hint}
+                  <strong className="font-semibold text-[var(--text-primary)]">Hint:</strong>{' '}
+                  <FormattedText text={q.hint} />
                 </p>
               )}
               {localReveal && q.difficultyRationale && (
                 <p className="text-[var(--text-secondary)]">
                   <strong className="font-semibold text-[var(--text-primary)]">Difficulty Rationale:</strong>{' '}
-                  {q.difficultyRationale}
+                  <FormattedText text={q.difficultyRationale} />
                 </p>
               )}
             </div>
@@ -380,16 +508,20 @@ export function QuestionCard({
             )}
           </div>
 
-          {onToggleBookmark && (
+          {onUpdateMark && (
             <Button
-              variant={isBookmarked ? 'secondary' : 'outline'}
+              variant={isMarked ? 'secondary' : 'outline'}
               size="sm"
-              aria-label={isBookmarked ? 'Remove bookmark' : 'Bookmark question'}
-              onClick={() => onToggleBookmark(activeQuestion.id)}
-              className={cn(isBookmarked && 'border-amber-200 bg-amber-50 text-amber-700')}
+              aria-expanded={markOpen}
+              aria-label={isMarked ? 'Edit question marks' : 'Mark question'}
+              onClick={() => setMarkOpen((prev) => !prev)}
+              className={cn(
+                isMarked &&
+                  'border-amber-300 bg-amber-50 text-amber-800 hover:bg-amber-100/80 dark:border-amber-700/70 dark:bg-amber-950/40 dark:text-amber-300 dark:hover:bg-amber-950/60',
+              )}
             >
-              <Bookmark className={cn('h-3.5 w-3.5', isBookmarked && 'fill-current')} />
-              {isBookmarked ? 'Bookmarked' : 'Bookmark'}
+              <Bookmark className={cn('h-3.5 w-3.5', isMarked && 'fill-current')} />
+              {isMarked ? 'Marked' : 'Mark'}
             </Button>
           )}
 
@@ -499,6 +631,132 @@ export function QuestionCard({
           </div>
         )}
 
+        {!markOpen && savedNote.trim().length > 0 && (
+          <div className="mt-2 flex justify-center">
+            <button
+              type="button"
+              onClick={() => {
+                setMarkOpen(true);
+                setNotesOpen(true);
+              }}
+              className="inline-flex max-w-full items-center gap-1.5 rounded-md border border-amber-200 dark:border-amber-800/70 bg-amber-50/70 dark:bg-amber-950/30 px-2.5 py-1 text-xs text-amber-900 dark:text-amber-200 hover:bg-amber-100/70 dark:hover:bg-amber-950/50 cursor-pointer"
+              title="Click to edit note"
+            >
+              <StickyNote className="h-3 w-3 shrink-0 text-amber-600 dark:text-amber-400" />
+              <span className="truncate">{savedNote}</span>
+            </button>
+          </div>
+        )}
+
+        {/* Mark Options Pop-in Panel */}
+        {markOpen && onUpdateMark && (
+          <div className="mt-3 flex flex-col gap-2.5 rounded-lg border border-[var(--border-color)] bg-[var(--bg-primary)] px-3 py-2.5">
+            <div className="flex flex-wrap items-center justify-center gap-2">
+              <Button
+                type="button"
+                variant={activeMark?.rating === 'good' ? 'secondary' : 'outline'}
+                size="sm"
+                aria-pressed={activeMark?.rating === 'good'}
+                onClick={() =>
+                  onUpdateMark(activeQuestion.id, {
+                    rating: activeMark?.rating === 'good' ? null : 'good',
+                  })
+                }
+                className={cn(
+                  'h-8 px-3 text-xs',
+                  activeMark?.rating === 'good' &&
+                    'border-emerald-300 bg-emerald-50 text-emerald-800 hover:bg-emerald-100/80 dark:border-emerald-700/70 dark:bg-emerald-950/40 dark:text-emerald-300',
+                )}
+              >
+                <ThumbsUp className="h-3.5 w-3.5" />
+                Good
+              </Button>
+
+              <Button
+                type="button"
+                variant={activeMark?.rating === 'bad' ? 'secondary' : 'outline'}
+                size="sm"
+                aria-pressed={activeMark?.rating === 'bad'}
+                onClick={() =>
+                  onUpdateMark(activeQuestion.id, {
+                    rating: activeMark?.rating === 'bad' ? null : 'bad',
+                  })
+                }
+                className={cn(
+                  'h-8 px-3 text-xs',
+                  activeMark?.rating === 'bad' &&
+                    'border-rose-300 bg-rose-50 text-rose-800 hover:bg-rose-100/80 dark:border-rose-700/70 dark:bg-rose-950/40 dark:text-rose-300',
+                )}
+              >
+                <ThumbsDown className="h-3.5 w-3.5" />
+                Bad
+              </Button>
+
+              <Button
+                type="button"
+                variant={notesOpen || savedNote.trim().length > 0 ? 'secondary' : 'outline'}
+                size="sm"
+                aria-expanded={notesOpen}
+                onClick={() => setNotesOpen((prev) => !prev)}
+                className={cn(
+                  'h-8 px-3 text-xs',
+                  savedNote.trim().length > 0 &&
+                    'border-amber-300 bg-amber-50 text-amber-800 hover:bg-amber-100/80 dark:border-amber-700/70 dark:bg-amber-950/40 dark:text-amber-300',
+                )}
+              >
+                <StickyNote className="h-3.5 w-3.5" />
+                Notes
+              </Button>
+            </div>
+
+            {notesOpen && (
+              <div className="flex flex-col gap-1.5 border-t border-[var(--border-color)] pt-2">
+                <div className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    aria-label="Question note"
+                    maxLength={NOTE_MAX_LENGTH}
+                    value={noteDraft}
+                    onChange={(e) => setNoteDraft(e.target.value.slice(0, NOTE_MAX_LENGTH))}
+                    onBlur={commitNoteDraft}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        commitNoteDraft();
+                        e.currentTarget.blur();
+                      }
+                    }}
+                    placeholder="Add a short note for this question..."
+                    className="h-8 min-w-0 flex-1 rounded-md border border-[var(--border-color)] bg-[var(--bg-surface)] px-2.5 text-xs text-[var(--text-primary)] placeholder:text-[var(--text-secondary)] focus:border-amber-400 focus:outline-none"
+                  />
+                  {(noteDraft.length > 0 || savedNote.length > 0) && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      aria-label="Clear note"
+                      onClick={() => {
+                        setNoteDraft('');
+                        onUpdateMark(activeQuestion.id, { personalNote: '' });
+                      }}
+                      className="h-8 px-2 text-xs text-[var(--text-secondary)] hover:text-rose-600"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                      Clear
+                    </Button>
+                  )}
+                </div>
+                <div className="flex items-center justify-between text-[11px] text-[var(--text-secondary)]">
+                  <span>Saved locally to this browser (auto-saves on Enter or blur).</span>
+                  <span className="font-mono tabular-nums">
+                    {noteDraft.length}/{NOTE_MAX_LENGTH}
+                  </span>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Variant Switcher Bar */}
         {variantsOpen && (
           <div className="mt-3 flex flex-col items-center gap-1.5 rounded-lg border border-[var(--border-color)] bg-[var(--bg-primary)] px-3 py-2">
@@ -509,11 +767,15 @@ export function QuestionCard({
                 return (
                   <Button
                     key={`variant-${idx + 1}`}
-                    variant={isActive ? 'primary' : 'outline'}
+                    variant="outline"
                     size="sm"
                     disabled={!isLoaded}
                     onClick={() => transitionToVariant(idx)}
-                    className="h-8 min-w-16 px-4 text-xs font-mono"
+                    className={cn(
+                      'h-8 min-w-16 px-4 text-xs font-mono',
+                      isActive &&
+                        'border-[#e5d3ba] bg-[#EFE1CE] text-[#363945] hover:bg-[var(--cream-surface-hover)] dark:border-[var(--cream-border)] dark:bg-[#363945] dark:text-[#EFE1CE]',
+                    )}
                   >
                     V{idx + 1}
                   </Button>
@@ -526,12 +788,14 @@ export function QuestionCard({
                 return (
                   <Button
                     key={remix.id}
-                    variant={isActive ? 'primary' : 'outline'}
+                    variant="outline"
                     size="sm"
                     onClick={() => transitionToVariant(slotIdx)}
                     title={`Local remix (${remix.question.displayId})`}
                     className={cn(
                       'h-8 min-w-16 px-3 text-xs font-mono',
+                      isActive &&
+                        'border-[#e5d3ba] bg-[#EFE1CE] text-[#363945] hover:bg-[var(--cream-surface-hover)] dark:border-[var(--cream-border)] dark:bg-[#363945] dark:text-[#EFE1CE]',
                       !isActive && 'border-teal-300 bg-teal-50/70 text-teal-800 hover:bg-teal-100/70',
                     )}
                   >

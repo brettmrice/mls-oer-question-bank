@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import {
   ChevronDown,
   ChevronRight,
+  Database,
   Lock,
   Minus,
   Plus,
@@ -11,24 +12,32 @@ import {
 } from 'lucide-react';
 import { Badge, Button, Card, Checkbox as TreeCheckbox, Input } from '@/components/ui/primitives';
 import { BLOOM_META, cn } from '@/lib/utils';
-import type {
-  AscpPathFacet,
-  FilterState,
-  ManifestData,
-  ShardManifest,
+import {
+  DEFAULT_FILTERS,
+  type AscpPathFacet,
+  type FilterState,
+  type ManifestData,
+  type MarkFilterTag,
+  type ShardManifest,
 } from '@/types/question';
+
+export interface MarkCounts {
+  good: number;
+  bad: number;
+  notes: number;
+}
 
 export interface FilterSidebarProps {
   manifest: ManifestData;
   filters: FilterState;
   ascpPathFacets: AscpPathFacet[];
+  availableBloomLevels?: string[] | null;
+  markCounts?: MarkCounts;
   facetsLoading: boolean;
   onEnsureTopicFacets: (topicCodes: string[]) => void;
   activeSemanticShards: string[];
   semanticPrompt: string;
   semanticLoading: boolean;
-  selectedCount: number;
-  loadTimeMs: number;
   onUpdateFilters: (patch: Partial<FilterState>) => void;
   onResetFilters: () => void;
   onOpenSemanticModal: () => void;
@@ -44,6 +53,23 @@ interface PathTreeNode {
 }
 
 const MLS_DISCIPLINE_ORDER = ['BB', 'UA', 'BF', 'CH', 'HE', 'IM', 'MI', 'LO', 'MB'];
+
+function getTreeToggleButtonClass(
+  checked: boolean,
+  partial = false,
+  sizeClass = 'h-3.5 w-3.5',
+): string {
+  const isPartial = partial && !checked;
+  return cn(
+    'inline-flex shrink-0 items-center justify-center rounded border transition-colors cursor-pointer',
+    sizeClass,
+    checked
+      ? 'border-[#e5d3ba] bg-[#EFE1CE] text-[#363945] hover:bg-[var(--cream-surface-hover)] dark:border-[var(--cream-border)] dark:bg-[#363945] dark:text-[#EFE1CE]'
+      : isPartial
+        ? 'border-slate-400 bg-transparent text-[#363945] hover:bg-[var(--cream-surface-soft)] dark:border-slate-500 dark:bg-transparent dark:text-[#EFE1CE]'
+        : 'border-slate-300 bg-transparent text-[var(--text-secondary)] hover:bg-[var(--cream-surface-soft)] dark:border-slate-600 dark:bg-transparent',
+  );
+}
 
 function buildPathTree(
   facets: AscpPathFacet[],
@@ -91,12 +117,13 @@ function toggleArrayItem(list: string[], value: string): string[] {
   return list.includes(value) ? list.filter((v) => v !== value) : [...list, value];
 }
 
-type SidebarSectionId = 'topics' | 'bloom' | 'difficulty' | 'questionType' | 'keyword';
+type SidebarSectionId = 'topics' | 'bloom' | 'difficulty' | 'questionType' | 'marks' | 'keyword';
 
 interface CollapsibleFilterCardProps {
   title: React.ReactNode;
   collapsed: boolean;
   onToggle: () => void;
+  disabled?: boolean;
   headerAction?: React.ReactNode;
   footer?: React.ReactNode;
   children: React.ReactNode;
@@ -109,32 +136,113 @@ function CollapsibleFilterCard({
   title,
   collapsed,
   onToggle,
+  disabled = false,
   headerAction,
   footer,
   children,
 }: CollapsibleFilterCardProps): React.ReactElement {
   return (
-    <Card className="p-4">
+    <Card className={cn('p-4', disabled && 'opacity-60')}>
       <div className="flex items-center justify-between gap-2">
         <button
           type="button"
-          onClick={onToggle}
-          aria-expanded={!collapsed}
-          className="group flex min-w-0 flex-1 items-center gap-1.5 text-left cursor-pointer"
+          disabled={disabled}
+          onClick={disabled ? undefined : onToggle}
+          aria-expanded={disabled ? false : !collapsed}
+          className={cn(
+            'group flex min-w-0 flex-1 items-center gap-1.5 text-left',
+            disabled ? 'cursor-not-allowed' : 'cursor-pointer',
+          )}
         >
           {collapsed ? (
-            <ChevronRight className="h-3.5 w-3.5 shrink-0 text-[var(--text-secondary)] group-hover:text-[var(--text-primary)]" />
+            <ChevronRight
+              className={cn(
+                'h-3.5 w-3.5 shrink-0 text-[var(--text-secondary)]',
+                !disabled && 'group-hover:text-[var(--text-primary)]',
+              )}
+            />
           ) : (
-            <ChevronDown className="h-3.5 w-3.5 shrink-0 text-[var(--text-secondary)] group-hover:text-[var(--text-primary)]" />
+            <ChevronDown
+              className={cn(
+                'h-3.5 w-3.5 shrink-0 text-[var(--text-secondary)]',
+                !disabled && 'group-hover:text-[var(--text-primary)]',
+              )}
+            />
           )}
-          <h2 className="truncate text-xs font-semibold uppercase tracking-wider text-[var(--text-secondary)] group-hover:text-[var(--text-primary)]">
+          <h2
+            className={cn(
+              'truncate text-xs font-semibold uppercase tracking-wider text-[var(--text-secondary)]',
+              !disabled && 'group-hover:text-[var(--text-primary)]',
+            )}
+          >
             {title}
           </h2>
         </button>
         {headerAction}
       </div>
-      {!collapsed && <div className="mt-3">{children}</div>}
+      {!collapsed && !disabled && <div className="mt-3">{children}</div>}
       {footer}
+    </Card>
+  );
+}
+
+export interface TopicsFilterSummaryCardProps {
+  totalQuestions: number;
+  loadedCount: number;
+  selectedCount: number;
+  loadTimeMs: number;
+  className?: string;
+}
+
+/**
+ * Sticky summary card rendered above the scrollable filter cards.
+ */
+export function TopicsFilterSummaryCard({
+  totalQuestions,
+  loadedCount,
+  selectedCount,
+  loadTimeMs,
+  className,
+}: TopicsFilterSummaryCardProps): React.ReactElement {
+  const selectedPct =
+    loadedCount > 0 ? Math.round((selectedCount / loadedCount) * 100) : 0;
+
+  return (
+    <Card className={cn('shrink-0 p-4 flex items-center gap-4', className)}>
+      <div
+        className="shrink-0 flex items-center gap-2 text-[var(--text-secondary)]"
+        title="Total questions in bank"
+      >
+        <Database className="h-6 w-6" strokeWidth={1.75} aria-hidden="true" />
+        <span className="text-xs font-medium tabular-nums">
+          {totalQuestions.toLocaleString()}
+        </span>
+      </div>
+      <div className="w-px self-stretch shrink-0 bg-[var(--border-color)]" aria-hidden="true" />
+      <div className="min-w-0 flex-1 flex justify-center">
+        <div
+          className="grid grid-cols-[auto_auto_auto_auto] items-baseline gap-x-1.5 gap-y-1 text-xs text-[var(--text-secondary)] tabular-nums"
+          title="Loaded questions with running median load time (last 2000 ms), and selected questions"
+        >
+          <span>Loaded</span>
+          <span className="text-right">
+            {loadedCount.toLocaleString()}
+          </span>
+          <span aria-hidden="true">|</span>
+          <span className="whitespace-nowrap">
+            {loadTimeMs} ms
+          </span>
+
+          <span>Selected</span>
+          <span className="text-right font-semibold text-[var(--text-primary)]">
+            {selectedCount.toLocaleString()}
+          </span>
+          <span aria-hidden="true">|</span>
+          <span className="whitespace-nowrap font-semibold text-[var(--text-primary)]">
+            {selectedPct}%
+          </span>
+        </div>
+      </div>
     </Card>
   );
 }
@@ -143,13 +251,13 @@ export function FilterSidebar({
   manifest,
   filters,
   ascpPathFacets,
+  availableBloomLevels,
+  markCounts,
   facetsLoading,
   onEnsureTopicFacets,
   activeSemanticShards,
   semanticPrompt,
   semanticLoading,
-  selectedCount,
-  loadTimeMs,
   onUpdateFilters,
   onResetFilters,
   onOpenSemanticModal,
@@ -166,7 +274,8 @@ export function FilterSidebar({
     topics: false,
     bloom: false,
     difficulty: false,
-    questionType: false,
+    questionType: true,
+    marks: false,
     keyword: false,
   });
 
@@ -599,7 +708,7 @@ export function FilterSidebar({
                       aria-label={`Toggle ${node.label}`}
                       onClick={toggleNodeExpand}
                       onDoubleClick={() => handleDoubleClickPathNode(node, isExpanded)}
-                      className="rounded p-0.5 text-[var(--text-secondary)] hover:bg-[var(--cream-surface-soft)] cursor-pointer"
+                      className={getTreeToggleButtonClass(isChecked, isPartial)}
                     >
                       {isExpanded ? (
                         <Minus className="h-3 w-3" />
@@ -608,7 +717,7 @@ export function FilterSidebar({
                       )}
                     </button>
                   ) : (
-                    <span className="w-4 shrink-0" aria-hidden="true" />
+                    <span className="w-3.5 shrink-0" aria-hidden="true" />
                   )}
                 </div>
               </div>
@@ -622,36 +731,12 @@ export function FilterSidebar({
     );
   };
 
-  const selectedPct =
-    manifest.totalQuestions > 0
-      ? Math.round((selectedCount / manifest.totalQuestions) * 100)
-      : 0;
-
   return (
     <aside className="flex flex-col gap-4">
       <CollapsibleFilterCard
-        title={
-          <>
-            Question Bank | {manifest.totalQuestions.toLocaleString()}{' '}
-            <span className="normal-case font-normal" title="Running average load time">
-              (avg {loadTimeMs} ms)
-            </span>
-          </>
-        }
+        title="Question Bank"
         collapsed={collapsedSections.topics}
         onToggle={() => toggleSection('topics')}
-        footer={
-          <div className="mt-3 border-t border-[var(--border-color)] pt-2.5 text-center text-xs font-medium text-[var(--text-secondary)]">
-            Selected |{' '}
-            <span className="font-semibold text-[var(--text-primary)]">
-              {selectedCount.toLocaleString()}
-            </span>{' '}
-            |{' '}
-            <span className="font-semibold text-[var(--text-primary)]">
-              {selectedPct}%
-            </span>
-          </div>
-        }
       >
         <div className="space-y-2">
           {disciplineGroups.map((disc) => {
@@ -713,12 +798,12 @@ export function FilterSidebar({
                       aria-label={`Toggle ${disc.name} subtopics`}
                       onClick={toggleDiscExpand}
                       onDoubleClick={() => handleDoubleClickDiscipline(disc, isExpanded)}
-                      className="rounded p-0.5 text-[var(--text-secondary)] hover:bg-[var(--cream-surface-soft)] cursor-pointer"
+                      className={getTreeToggleButtonClass(isDiscChecked, isDiscPartial, 'h-4 w-4')}
                     >
                       {isExpanded ? (
-                        <Minus className="h-3.5 w-3.5" />
+                        <Minus className="h-3 w-3" />
                       ) : (
-                        <Plus className="h-3.5 w-3.5" />
+                        <Plus className="h-3 w-3" />
                       )}
                     </button>
                   </div>
@@ -792,7 +877,7 @@ export function FilterSidebar({
                                   aria-label={`Toggle ${shard.topicName} subtopics`}
                                   onClick={toggleTopicExpand}
                                   onDoubleClick={() => handleDoubleClickShard(shard, topicExpanded)}
-                                  className="rounded p-0.5 text-[var(--text-secondary)] hover:bg-[var(--cream-surface-soft)] cursor-pointer"
+                                  className={getTreeToggleButtonClass(topicChecked, isTopicPartial)}
                                 >
                                   {topicExpanded ? (
                                     <Minus className="h-3 w-3" />
@@ -829,85 +914,135 @@ export function FilterSidebar({
         title="Bloom's Taxonomy Level"
         collapsed={collapsedSections.bloom}
         onToggle={() => toggleSection('bloom')}
+        headerAction={
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() =>
+              onUpdateFilters({
+                bloomLevels: DEFAULT_FILTERS.bloomLevels,
+                page: 1,
+              })
+            }
+            className="h-6 px-2 text-xs shrink-0"
+          >
+            <RotateCcw className="h-3 w-3" />
+            Reset
+          </Button>
+        }
       >
         <div className="grid grid-cols-2 gap-1.5">
           {(['RE', 'UN', 'AP', 'AN'] as const).map((code) => {
             const meta = BLOOM_META[code];
-            const active = filters.bloomLevels.includes(code);
+            const isAvailable =
+              availableBloomLevels == null || availableBloomLevels.includes(code);
+            const active = filters.bloomLevels.includes(code) && isAvailable;
             return (
-              <button
+              <label
                 key={code}
-                type="button"
-                onClick={() =>
-                  onUpdateFilters({
-                    bloomLevels: toggleArrayItem(filters.bloomLevels, code),
-                    page: 1,
-                  })
-                }
                 className={cn(
-                  'flex items-center justify-center rounded-lg border px-2.5 py-1.5 text-center text-xs font-medium transition cursor-pointer',
-                  active
-                    ? 'border-indigo-600 bg-indigo-600 text-white dark:border-indigo-500 dark:bg-indigo-500'
-                    : 'border-[var(--border-color)] bg-[var(--bg-surface)] text-[var(--text-primary)] hover:bg-[var(--cream-surface-soft)]',
+                  'flex items-center gap-2 rounded-lg border border-[var(--border-color)] bg-[var(--bg-primary)] px-2.5 py-1.5 text-xs font-medium text-[var(--text-primary)] transition',
+                  isAvailable
+                    ? 'hover:bg-[var(--cream-surface-soft)] cursor-pointer'
+                    : 'opacity-50 cursor-not-allowed',
                 )}
               >
-                <span>{meta.label}</span>
-              </button>
+                <TreeCheckbox
+                  checked={active}
+                  disabled={!isAvailable}
+                  onChange={() => {
+                    if (!isAvailable) return;
+                    onUpdateFilters({
+                      bloomLevels: toggleArrayItem(filters.bloomLevels, code),
+                      page: 1,
+                    });
+                  }}
+                />
+                <span className="min-w-0 flex-1 text-center">{meta.label}</span>
+              </label>
             );
           })}
         </div>
       </CollapsibleFilterCard>
 
       <CollapsibleFilterCard
-        title="Difficulty (1–10)"
+        title="Difficulty"
         collapsed={collapsedSections.difficulty}
         onToggle={() => toggleSection('difficulty')}
         headerAction={
-          <span className="shrink-0 text-xs font-medium text-[var(--text-primary)]">
-            {filters.difficultyMin} – {filters.difficultyMax}
-          </span>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() =>
+              onUpdateFilters({
+                difficultyMin: DEFAULT_FILTERS.difficultyMin,
+                difficultyMax: DEFAULT_FILTERS.difficultyMax,
+                page: 1,
+              })
+            }
+            className="h-6 px-2 text-xs shrink-0"
+          >
+            <RotateCcw className="h-3 w-3" />
+            Reset
+          </Button>
         }
       >
         <div className="flex items-center gap-2">
-          <select
-            aria-label="Minimum difficulty"
-            value={filters.difficultyMin}
-            onChange={(e) => {
-              const nextMin = Number(e.target.value);
-              onUpdateFilters({
-                difficultyMin: nextMin,
-                difficultyMax: Math.max(nextMin, filters.difficultyMax),
-                page: 1,
-              });
-            }}
-            className="h-8 flex-1 rounded-md border border-[var(--border-color)] bg-[var(--bg-surface)] px-2 text-xs text-[var(--text-primary)]"
-          >
-            {Array.from({ length: 10 }, (_, i) => i + 1).map((n) => (
-              <option key={n} value={n}>
-                Min {n}
-              </option>
-            ))}
-          </select>
+          <div className="relative flex-1">
+            <select
+              aria-label="Minimum difficulty"
+              value={filters.difficultyMin}
+              onChange={(e) => {
+                const nextMin = Number(e.target.value);
+                onUpdateFilters({
+                  difficultyMin: nextMin,
+                  difficultyMax: Math.max(nextMin, filters.difficultyMax),
+                  page: 1,
+                });
+              }}
+              className="h-8 w-full appearance-none rounded-lg border border-[var(--border-color)] bg-[var(--bg-primary)] pl-2.5 pr-8 text-xs font-medium text-[var(--text-primary)] transition hover:bg-[var(--cream-surface-soft)] cursor-pointer"
+            >
+              {Array.from({ length: 10 }, (_, i) => i + 1).map((n) => (
+                <option key={n} value={n}>
+                  Min {n}
+                </option>
+              ))}
+            </select>
+            <span
+              aria-hidden="true"
+              className="pointer-events-none absolute inset-y-[1px] right-[1px] flex w-6 items-center justify-center rounded-r-[7px] border-l border-[var(--border-color)] bg-[#EFE1CE] text-[#363945] dark:bg-[#363945] dark:text-[#EFE1CE]"
+            >
+              <ChevronDown className="h-3.5 w-3.5" />
+            </span>
+          </div>
           <span className="text-xs text-[var(--text-secondary)]">to</span>
-          <select
-            aria-label="Maximum difficulty"
-            value={filters.difficultyMax}
-            onChange={(e) => {
-              const nextMax = Number(e.target.value);
-              onUpdateFilters({
-                difficultyMax: nextMax,
-                difficultyMin: Math.min(filters.difficultyMin, nextMax),
-                page: 1,
-              });
-            }}
-            className="h-8 flex-1 rounded-md border border-[var(--border-color)] bg-[var(--bg-surface)] px-2 text-xs text-[var(--text-primary)]"
-          >
-            {Array.from({ length: 10 }, (_, i) => i + 1).map((n) => (
-              <option key={n} value={n}>
-                Max {n}
-              </option>
-            ))}
-          </select>
+          <div className="relative flex-1">
+            <select
+              aria-label="Maximum difficulty"
+              value={filters.difficultyMax}
+              onChange={(e) => {
+                const nextMax = Number(e.target.value);
+                onUpdateFilters({
+                  difficultyMax: nextMax,
+                  difficultyMin: Math.min(filters.difficultyMin, nextMax),
+                  page: 1,
+                });
+              }}
+              className="h-8 w-full appearance-none rounded-lg border border-[var(--border-color)] bg-[var(--bg-primary)] pl-2.5 pr-8 text-xs font-medium text-[var(--text-primary)] transition hover:bg-[var(--cream-surface-soft)] cursor-pointer"
+            >
+              {Array.from({ length: 10 }, (_, i) => i + 1).map((n) => (
+                <option key={n} value={n}>
+                  Max {n}
+                </option>
+              ))}
+            </select>
+            <span
+              aria-hidden="true"
+              className="pointer-events-none absolute inset-y-[1px] right-[1px] flex w-6 items-center justify-center rounded-r-[7px] border-l border-[var(--border-color)] bg-[#EFE1CE] text-[#363945] dark:bg-[#363945] dark:text-[#EFE1CE]"
+            >
+              <ChevronDown className="h-3.5 w-3.5" />
+            </span>
+          </div>
         </div>
       </CollapsibleFilterCard>
 
@@ -915,6 +1050,7 @@ export function FilterSidebar({
         title="Question Type"
         collapsed={collapsedSections.questionType}
         onToggle={() => toggleSection('questionType')}
+        disabled
       >
         <div className="flex flex-wrap gap-1.5">
           {availableQuestionTypes.map((qt) => {
@@ -944,6 +1080,75 @@ export function FilterSidebar({
       </CollapsibleFilterCard>
 
       <CollapsibleFilterCard
+        title="Marks"
+        collapsed={collapsedSections.marks}
+        onToggle={() => toggleSection('marks')}
+        headerAction={
+          filters.marks.length > 0 ? (
+            <button
+              type="button"
+              onClick={() => onUpdateFilters({ marks: [], page: 1 })}
+              className="text-[11px] font-medium text-indigo-700 hover:underline dark:text-indigo-400 cursor-pointer"
+            >
+              Clear
+            </button>
+          ) : undefined
+        }
+      >
+        <div className="flex flex-wrap gap-1.5">
+          {(
+            [
+              { id: 'good', label: 'Good', count: markCounts?.good },
+              { id: 'bad', label: 'Bad', count: markCounts?.bad },
+              { id: 'notes', label: 'Notes', count: markCounts?.notes },
+              { id: 'unmarked', label: 'Unmarked' },
+            ] as Array<{ id: MarkFilterTag; label: string; count?: number }>
+          ).map((chip) => {
+            const active = filters.marks.includes(chip.id);
+            const activeClass =
+              chip.id === 'good'
+                ? 'border-emerald-600 bg-emerald-600 text-white dark:border-emerald-500 dark:bg-emerald-500'
+                : chip.id === 'bad'
+                  ? 'border-rose-600 bg-rose-600 text-white dark:border-rose-500 dark:bg-rose-500'
+                  : chip.id === 'notes'
+                    ? 'border-amber-600 bg-amber-600 text-white dark:border-amber-500 dark:bg-amber-500'
+                    : 'border-indigo-600 bg-indigo-600 text-white dark:border-indigo-500 dark:bg-indigo-500';
+            return (
+              <button
+                key={chip.id}
+                type="button"
+                aria-pressed={active}
+                onClick={() => {
+                  const nextMarks = filters.marks.includes(chip.id)
+                    ? filters.marks.filter((m) => m !== chip.id)
+                    : [...filters.marks, chip.id];
+                  onUpdateFilters({ marks: nextMarks, page: 1 });
+                }}
+                className={cn(
+                  'inline-flex items-center gap-1 rounded-md border px-2.5 py-1 text-xs font-medium cursor-pointer transition-colors',
+                  active
+                    ? activeClass
+                    : 'border-[var(--border-color)] bg-[var(--bg-surface)] text-[var(--text-primary)] hover:bg-[var(--cream-surface-soft)]',
+                )}
+              >
+                <span>{chip.label}</span>
+                {chip.count !== undefined && chip.count > 0 && (
+                  <span
+                    className={cn(
+                      'font-mono text-[10px] tabular-nums',
+                      active ? 'text-white/90' : 'text-[var(--text-secondary)]',
+                    )}
+                  >
+                    ({chip.count})
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+      </CollapsibleFilterCard>
+
+      <CollapsibleFilterCard
         title="Keyword Search"
         collapsed={collapsedSections.keyword}
         onToggle={() => toggleSection('keyword')}
@@ -962,7 +1167,7 @@ export function FilterSidebar({
             value={keywordDraft}
             onChange={(e) => setKeywordDraft(e.target.value)}
             placeholder="Search stem, objective, option, ID..."
-            className="pl-8"
+            className="pl-8 bg-[var(--bg-primary)] border-[var(--border-color)] text-[var(--text-primary)] transition hover:bg-[var(--cream-surface-soft)]"
           />
         </div>
 

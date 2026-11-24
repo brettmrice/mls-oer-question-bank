@@ -7,8 +7,9 @@ import {
   RotateCcw,
   XCircle,
 } from 'lucide-react';
+import { FormattedText } from '@/components/FormattedText';
 import { Badge, Button, Card } from '@/components/ui/primitives';
-import { BLOOM_META, cn, DISCIPLINE_COLORS } from '@/lib/utils';
+import { BLOOM_META, cn, DISCIPLINE_COLORS, formatAscpBreadcrumb } from '@/lib/utils';
 import type { QuestionRecord } from '@/types/question';
 
 export interface StudentPracticeViewProps {
@@ -178,12 +179,12 @@ export function StudentPracticeView({
               </div>
 
               <p className="text-[15px] font-medium leading-relaxed text-[var(--text-primary)]">
-                {q.questionText}
+                <FormattedText text={q.questionText} />
               </p>
 
               {!submitted && hintVisible && q.hint && (
                 <div className="rounded-lg border border-amber-200 dark:border-amber-800/70 bg-amber-50/70 dark:bg-amber-950/30 px-3 py-2 text-xs text-amber-950 dark:text-amber-200">
-                  <strong>Hint:</strong> {q.hint}
+                  <strong>Hint:</strong> <FormattedText text={q.hint} />
                 </div>
               )}
 
@@ -228,13 +229,13 @@ export function StudentPracticeView({
                         />
                         <span className="flex-1">
                           <span className="font-mono font-bold mr-1.5">{opt.label})</span>
-                          {opt.text}
+                          <FormattedText text={opt.text} />
                         </span>
                       </div>
 
                       {submitted && opt.feedback && (
                         <p className="mt-1.5 pl-6 text-xs leading-relaxed opacity-90">
-                          {opt.feedback}
+                          <FormattedText text={opt.feedback} />
                         </p>
                       )}
                     </label>
@@ -244,8 +245,14 @@ export function StudentPracticeView({
 
               {submitted && (
                 <div className="pt-1 text-[11px] text-[var(--text-secondary)]">
-                  <strong>ASCP Path:</strong> {q.ascpPath}
-                  {q.hint ? ` • Hint: ${q.hint}` : ''}
+                  <strong>ASCP Path:</strong> {formatAscpBreadcrumb(q.ascpPath)}
+                  {q.hint ? (
+                    <>
+                      {' '}• Hint: <FormattedText text={q.hint} />
+                    </>
+                  ) : (
+                    ''
+                  )}
                 </div>
               )}
             </Card>

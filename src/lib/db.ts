@@ -31,10 +31,13 @@ export interface QuizWorkspaceRecord {
   lastSyncedAt?: string;
 }
 
+export type QuestionRating = 'good' | 'bad';
+
 export interface SavedQuestionRecord {
   questionId: string;
   bookmarkedAt: string;
   personalNote: string;
+  rating?: QuestionRating | null;
 }
 
 export interface AppStateRecord {

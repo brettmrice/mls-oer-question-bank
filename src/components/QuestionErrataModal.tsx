@@ -17,6 +17,7 @@ import {
   createGitHubIssue,
 } from '@/lib/githubApi';
 import type { GitHubSession } from '@/lib/githubAuth';
+import { formatAscpBreadcrumb } from '@/lib/utils';
 import type { QuestionOption, QuestionRecord } from '@/types/question';
 import { Badge, Button, Input } from './ui/primitives';
 
@@ -185,7 +186,9 @@ export function QuestionErrataModal({
                 {question.displayId}
               </Badge>
             </div>
-            <p className="mt-1 text-xs text-[var(--text-secondary)] truncate">{question.ascpPath}</p>
+            <p className="mt-1 text-xs text-[var(--text-secondary)] truncate">
+              {formatAscpBreadcrumb(question.ascpPath)}
+            </p>
           </div>
           <Button variant="ghost" size="icon" onClick={onClose} aria-label="Close errata modal">
             <X className="h-4 w-4" />

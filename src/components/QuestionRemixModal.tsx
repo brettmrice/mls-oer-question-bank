@@ -22,6 +22,7 @@ import {
 } from '@/lib/githubApi';
 import type { GitHubSession } from '@/lib/githubAuth';
 import { saveRemixedQuestion } from '@/lib/remixStore';
+import { formatAscpBreadcrumb } from '@/lib/utils';
 import type { ManifestData, QuestionOption, QuestionRecord } from '@/types/question';
 import { Badge, Button, Input } from './ui/primitives';
 
@@ -397,7 +398,7 @@ export function QuestionRemixModal({
               </Badge>
             </div>
             <p className="mt-1 truncate text-xs text-[var(--text-secondary)]">
-              {ascpPath || sourceQuestion.ascpPath}
+              {formatAscpBreadcrumb(ascpPath || sourceQuestion.ascpPath)}
             </p>
           </div>
           <Button

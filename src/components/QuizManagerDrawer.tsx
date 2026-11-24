@@ -24,6 +24,7 @@ import {
   Upload,
 } from 'lucide-react';
 import { BlueprintBalanceMeter } from '@/components/BlueprintBalanceMeter';
+import { FormattedText } from '@/components/FormattedText';
 import { QuizExportButtons } from '@/components/QuizExportButtons';
 import { Badge, Button, Drawer, Input, Separator, Skeleton } from '@/components/ui/primitives';
 import { getGitHubConfig } from '@/config/github';
@@ -785,7 +786,7 @@ export function QuizManagerDrawer({
                                 </Badge>
                               </div>
                               <p className="text-xs font-medium text-[var(--text-primary)] line-clamp-2">
-                                {q.questionText}
+                                <FormattedText text={q.questionText} />
                               </p>
                             </div>
 
@@ -891,7 +892,7 @@ export function QuizManagerDrawer({
                                             {cand.displayId}
                                           </span>
                                           <span className="text-[var(--text-primary)] line-clamp-1">
-                                            {cand.questionText}
+                                            <FormattedText text={cand.questionText} />
                                           </span>
                                         </div>
                                         <Button
