@@ -1,15 +1,21 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   BookOpen,
+  ChevronDown,
   ClipboardList,
+  ExternalLink,
   Github,
   HelpCircle,
+  Loader2,
   LogOut,
+  MessageCircle,
   Moon,
   Sun,
+  User,
   X,
 } from 'lucide-react';
-import { Badge, Button } from '@/components/ui/primitives';
+import { Badge, Button, Separator } from '@/components/ui/primitives';
+import type { GitHubSession } from '@/lib/githubAuth';
 import type { BackupStatus } from '@/lib/quizStore';
 import type { ManifestData } from '@/types/question';
 
@@ -20,6 +26,8 @@ export interface NavbarProps {
   quizCount: number;
   activeQuizQuestionCount: number;
   backupStatus: BackupStatus | null;
+  githubSession?: GitHubSession | null;
+  githubAuthBusy?: boolean;
   githubUsername?: string | null;
   theme?: 'light' | 'dark';
   onToggleTheme?: () => void;
@@ -37,26 +45,53 @@ export function Navbar({
   manifest,
   activeView,
   backupStatus,
+  githubSession = null,
+  githubAuthBusy = false,
   githubUsername = null,
   theme = 'light',
   onToggleTheme,
   onSelectView,
+  onOpenQuizManager,
+  onOpenFeedback,
   onGitHubLogin,
   onGitHubLogout,
   onOpenMobileQuizBuilder,
 }: NavbarProps): React.ReactElement {
   const [aboutOpen, setAboutOpen] = useState(false);
+  const [profileOpen, setProfileOpen] = useState(false);
+  const profileMenuRef = useRef<HTMLDivElement | null>(null);
+  const effectiveUsername = githubSession?.username ?? githubUsername ?? null;
   const unsyncedCount =
     (backupStatus?.unsyncedQuizCount ?? 0) + (backupStatus?.unsyncedBookmarkCount ?? 0);
 
   useEffect(() => {
-    if (!aboutOpen) return;
+    if (!aboutOpen && !profileOpen) return;
     const handleKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setAboutOpen(false);
+      if (e.key === 'Escape') {
+        setAboutOpen(false);
+        setProfileOpen(false);
+      }
     };
     window.addEventListener('keydown', handleKey);
     return () => window.removeEventListener('keydown', handleKey);
-  }, [aboutOpen]);
+  }, [aboutOpen, profileOpen]);
+
+  useEffect(() => {
+    if (!profileOpen) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      if (profileMenuRef.current && !profileMenuRef.current.contains(e.target as Node)) {
+        setProfileOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [profileOpen]);
+
+  useEffect(() => {
+    if (!effectiveUsername) {
+      setProfileOpen(false);
+    }
+  }, [effectiveUsername]);
 
   return (
     <>
@@ -137,20 +172,182 @@ export function Navbar({
             </Button>
           )}
           {onGitHubLogin && (
-            <div className="flex items-center gap-1.5">
-              <Button variant="outline" size="sm" onClick={onGitHubLogin}>
-                <Github className="h-3.5 w-3.5 text-[var(--text-secondary)]" />
-                <span>{githubUsername ? `@${githubUsername}` : 'Github Login'}</span>
-              </Button>
-              {githubUsername && onGitHubLogout && (
+            <div className="relative flex items-center gap-1.5" ref={profileMenuRef}>
+              {effectiveUsername ? (
+                <>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setProfileOpen((prev) => !prev)}
+                    aria-expanded={profileOpen}
+                    aria-haspopup="menu"
+                    title={`Signed in to GitHub as @${effectiveUsername}`}
+                    className="border-emerald-300/80 bg-emerald-50/50 hover:bg-emerald-50 dark:border-emerald-800/80 dark:bg-emerald-950/30 dark:hover:bg-emerald-950/50"
+                  >
+                    <span className="relative flex h-5 w-5 shrink-0 items-center justify-center">
+                      {githubSession?.avatarUrl ? (
+                        <img
+                          src={githubSession.avatarUrl}
+                          alt={`@${effectiveUsername}`}
+                          className="h-5 w-5 rounded-full object-cover border border-[var(--border-color)]"
+                        />
+                      ) : (
+                        <span className="flex h-5 w-5 items-center justify-center rounded-full bg-indigo-100 text-indigo-700 dark:bg-indigo-900/60 dark:text-indigo-200">
+                          <User className="h-3 w-3" />
+                        </span>
+                      )}
+                      <span
+                        aria-hidden="true"
+                        className="absolute -bottom-0.5 -right-0.5 h-2 w-2 rounded-full bg-emerald-500 ring-1 ring-[var(--bg-surface)]"
+                      />
+                    </span>
+                    <span className="max-w-[140px] truncate font-medium">
+                      @{effectiveUsername}
+                    </span>
+                    <ChevronDown className="h-3.5 w-3.5 text-[var(--text-secondary)]" />
+                  </Button>
+
+                  {profileOpen && (
+                    <div
+                      role="menu"
+                      aria-label="GitHub profile menu"
+                      className="absolute right-0 top-full z-50 mt-2 w-72 rounded-xl border border-[var(--border-color)] bg-[var(--bg-surface)] p-3.5 shadow-xl space-y-3"
+                    >
+                      <div className="flex items-start gap-3">
+                        {githubSession?.avatarUrl ? (
+                          <img
+                            src={githubSession.avatarUrl}
+                            alt={`@${effectiveUsername}`}
+                            className="h-10 w-10 rounded-full object-cover border border-[var(--border-color)] shrink-0"
+                          />
+                        ) : (
+                          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-indigo-100 text-indigo-700 dark:bg-indigo-900/60 dark:text-indigo-200 shrink-0">
+                            <Github className="h-5 w-5" />
+                          </div>
+                        )}
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm font-semibold text-[var(--text-primary)] truncate">
+                            {githubSession?.name || `@${effectiveUsername}`}
+                          </p>
+                          <p className="text-xs text-[var(--text-secondary)] truncate">
+                            @{effectiveUsername}
+                          </p>
+                          <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                            <Badge
+                              variant="outline"
+                              className="text-[10px] border-emerald-300 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300"
+                            >
+                              Connected
+                            </Badge>
+                            {githubSession?.authMethod && (
+                              <Badge variant="accent" className="text-[10px] uppercase">
+                                {githubSession.authMethod}
+                              </Badge>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+
+                      {githubSession && (
+                        <div className="rounded-lg border border-[var(--border-color)] bg-[var(--bg-primary)] px-2.5 py-2 text-[11px] text-[var(--text-secondary)] space-y-1">
+                          <div>
+                            <span className="font-medium text-[var(--text-primary)]">Scopes:</span>{' '}
+                            {githubSession.scopes.length > 0
+                              ? githubSession.scopes.join(', ')
+                              : 'default'}
+                          </div>
+                          <div>
+                            <span className="font-medium text-[var(--text-primary)]">
+                              Signed in:
+                            </span>{' '}
+                            {new Date(githubSession.connectedAt).toLocaleString()}
+                          </div>
+                        </div>
+                      )}
+
+                      <Separator />
+
+                      <div className="space-y-1">
+                        <a
+                          href={`https://github.com/${effectiveUsername}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          role="menuitem"
+                          onClick={() => setProfileOpen(false)}
+                          className="flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-xs font-medium text-[var(--text-primary)] hover:bg-[var(--cream-surface-soft)] transition-colors"
+                        >
+                          <span className="flex items-center gap-2">
+                            <Github className="h-3.5 w-3.5 text-[var(--text-secondary)]" />
+                            View GitHub Profile
+                          </span>
+                          <ExternalLink className="h-3 w-3 text-[var(--text-secondary)]" />
+                        </a>
+                        {manifest && (
+                          <button
+                            type="button"
+                            role="menuitem"
+                            onClick={() => {
+                              setProfileOpen(false);
+                              onOpenQuizManager();
+                            }}
+                            className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-xs font-medium text-[var(--text-primary)] hover:bg-[var(--cream-surface-soft)] transition-colors cursor-pointer"
+                          >
+                            <ClipboardList className="h-3.5 w-3.5 text-[var(--text-secondary)]" />
+                            My Quizzes &amp; Gist Sync
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          role="menuitem"
+                          onClick={() => {
+                            setProfileOpen(false);
+                            onOpenFeedback();
+                          }}
+                          className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-xs font-medium text-[var(--text-primary)] hover:bg-[var(--cream-surface-soft)] transition-colors cursor-pointer"
+                        >
+                          <MessageCircle className="h-3.5 w-3.5 text-[var(--text-secondary)]" />
+                          Feedback &amp; My Activity
+                        </button>
+                      </div>
+
+                      {onGitHubLogout && (
+                        <>
+                          <Separator />
+                          <button
+                            type="button"
+                            role="menuitem"
+                            onClick={() => {
+                              setProfileOpen(false);
+                              onGitHubLogout();
+                            }}
+                            className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-xs font-medium text-rose-700 hover:bg-rose-50 dark:text-rose-400 dark:hover:bg-rose-950/40 transition-colors cursor-pointer"
+                          >
+                            <LogOut className="h-3.5 w-3.5" />
+                            Sign Out
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  )}
+                </>
+              ) : (
                 <Button
                   variant="outline"
-                  size="icon"
-                  onClick={onGitHubLogout}
-                  title="Sign out of GitHub"
-                  aria-label="Sign out of GitHub"
+                  size="sm"
+                  onClick={onGitHubLogin}
+                  disabled={githubAuthBusy}
                 >
-                  <LogOut className="h-3.5 w-3.5 text-[var(--text-secondary)]" />
+                  {githubAuthBusy ? (
+                    <>
+                      <Loader2 className="h-3.5 w-3.5 animate-spin text-[var(--text-secondary)]" />
+                      <span>Signing in...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Github className="h-3.5 w-3.5 text-[var(--text-secondary)]" />
+                      <span>GitHub Login</span>
+                    </>
+                  )}
                 </Button>
               )}
             </div>

@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual';
 import {
   AlertCircle,
+  CheckCircle2,
   Download,
   ListFilter,
   SlidersHorizontal,
@@ -127,8 +128,13 @@ export function App(): React.ReactElement {
 
   // Phase 5: GitHub Auth, Feedback Drawer & Errata Modal State
   const [githubSession, setGithubSession] = useState<GitHubSession | null>(null);
+  const [githubAuthBusy, setGithubAuthBusy] = useState<boolean>(false);
   const [feedbackDrawerOpen, setFeedbackDrawerOpen] = useState<boolean>(false);
   const [errataQuestion, setErrataQuestion] = useState<QuestionRecord | null>(null);
+  const [notice, setNotice] = useState<{ id: number; message: string; isError: boolean } | null>(
+    null,
+  );
+  const noticeTimerRef = useRef<number | null>(null);
 
   // Explorer Query State
   const [filters, setFilters] = useState<FilterState>(DEFAULT_FILTERS);
@@ -293,27 +299,61 @@ export function App(): React.ReactElement {
     };
   }, []);
 
-  const showNotice = useCallback((_msg: string) => {}, []);
+  const showNotice = useCallback((msg: string) => {
+    const trimmed = msg.trim();
+    if (!trimmed) return;
+    const isError =
+      /\b(error|failed|unable|mismatch|invalid|not configured|denied|expired)\b/i.test(trimmed);
+    setNotice({ id: Date.now(), message: trimmed, isError });
+    if (noticeTimerRef.current !== null) {
+      window.clearTimeout(noticeTimerRef.current);
+    }
+    noticeTimerRef.current = window.setTimeout(() => {
+      setNotice(null);
+      noticeTimerRef.current = null;
+    }, 6000);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (noticeTimerRef.current !== null) {
+        window.clearTimeout(noticeTimerRef.current);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     let active = true;
+    const search = typeof window !== 'undefined' ? window.location.search : '';
+    const hasOAuthParams = Boolean(search && (search.includes('code=') || search.includes('error=')));
+    if (hasOAuthParams) {
+      setGithubAuthBusy(true);
+    }
     (async () => {
-      const oauthRes = await completeGitHubOAuthCallback();
-      if (!active) return;
-      if (oauthRes.handled) {
-        if (oauthRes.session) {
-          setGithubSession(oauthRes.session);
-          showNotice(`Signed in with GitHub as @${oauthRes.session.username}.`);
-        } else if (oauthRes.error) {
-          showNotice(oauthRes.error);
+      try {
+        const oauthRes = await completeGitHubOAuthCallback();
+        if (!active) return;
+        if (oauthRes.handled) {
+          if (oauthRes.session) {
+            setGithubSession(oauthRes.session);
+            showNotice(`Signed in with GitHub as @${oauthRes.session.username}.`);
+          } else if (oauthRes.error) {
+            showNotice(oauthRes.error);
+          }
+          return;
         }
-        return;
+        const existing = await getGitHubSession();
+        if (active && existing) {
+          setGithubSession(existing);
+        }
+      } finally {
+        if (active && hasOAuthParams) {
+          setGithubAuthBusy(false);
+        }
       }
-      const existing = await getGitHubSession();
-      if (active && existing) {
-        setGithubSession(existing);
-      }
-    })().catch(() => {});
+    })().catch(() => {
+      if (active) setGithubAuthBusy(false);
+    });
     return () => {
       active = false;
     };
@@ -911,6 +951,8 @@ export function App(): React.ReactElement {
           quizCount={quizzes.length}
           activeQuizQuestionCount={activeQuiz?.questionIds.length ?? 0}
           backupStatus={backupStatus}
+          githubSession={githubSession}
+          githubAuthBusy={githubAuthBusy}
           githubUsername={githubSession?.username ?? null}
           theme={theme}
           onToggleTheme={toggleTheme}
@@ -994,6 +1036,8 @@ export function App(): React.ReactElement {
         quizCount={quizzes.length}
         activeQuizQuestionCount={activeQuiz?.questionIds.length ?? 0}
         backupStatus={backupStatus}
+        githubSession={githubSession}
+        githubAuthBusy={githubAuthBusy}
         githubUsername={githubSession?.username ?? null}
         theme={theme}
         onToggleTheme={toggleTheme}
@@ -1599,6 +1643,33 @@ export function App(): React.ReactElement {
       />
 
       <TruncatedTextTooltip />
+
+      {notice && (
+        <div
+          role="status"
+          aria-live="polite"
+          className={`fixed bottom-4 right-4 z-50 flex max-w-md items-start gap-2.5 rounded-xl border px-4 py-3 text-sm shadow-lg backdrop-blur-sm ${
+            notice.isError
+              ? 'border-rose-300 bg-rose-50/95 text-rose-950 dark:border-rose-800 dark:bg-rose-950/95 dark:text-rose-100'
+              : 'border-emerald-300 bg-emerald-50/95 text-emerald-950 dark:border-emerald-800 dark:bg-emerald-950/95 dark:text-emerald-100'
+          }`}
+        >
+          {notice.isError ? (
+            <AlertCircle className="h-4 w-4 text-rose-600 dark:text-rose-400 mt-0.5 shrink-0" />
+          ) : (
+            <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400 mt-0.5 shrink-0" />
+          )}
+          <span className="flex-1 leading-snug">{notice.message}</span>
+          <button
+            type="button"
+            onClick={() => setNotice(null)}
+            aria-label="Dismiss notification"
+            className="rounded p-0.5 opacity-70 hover:opacity-100 cursor-pointer"
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      )}
     </div>
   );
 }

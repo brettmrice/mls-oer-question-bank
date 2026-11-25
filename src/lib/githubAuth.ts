@@ -155,114 +155,157 @@ export function startGitHubOAuthFlow(): void {
   window.location.assign(url);
 }
 
-export async function completeGitHubOAuthCallback(searchString?: string): Promise<{
+export interface OAuthCallbackResult {
   handled: boolean;
   session?: GitHubSession;
   error?: string;
-}> {
+}
+
+let pendingOAuthCallback: { search: string; promise: Promise<OAuthCallbackResult> } | null = null;
+
+export async function completeGitHubOAuthCallback(
+  searchString?: string,
+): Promise<OAuthCallbackResult> {
   if (typeof window === 'undefined') {
     return { handled: false };
   }
 
   const rawSearch = searchString ?? window.location.search;
-  if (!rawSearch || !rawSearch.includes('code=')) {
+  if (!rawSearch) {
     return { handled: false };
   }
 
   const params = new URLSearchParams(rawSearch);
+  const oauthError = params.get('error')?.trim();
+  const oauthErrorDesc = params.get('error_description')?.trim();
   const code = params.get('code')?.trim();
   const state = params.get('state')?.trim();
-  if (!code) {
+
+  if (!code && !oauthError) {
     return { handled: false };
   }
 
-  const cleanUrl = `${window.location.pathname}${window.location.hash}`;
-  const clearQueryParams = () => {
-    try {
-      window.history.replaceState(null, '', cleanUrl || '/');
-    } catch {
-      // ignore history errors in test runners
-    }
-  };
-
-  let expectedState: string | null = null;
-  try {
-    expectedState = window.sessionStorage.getItem(OAUTH_STATE_STORAGE_KEY);
-    window.sessionStorage.removeItem(OAUTH_STATE_STORAGE_KEY);
-  } catch {
-    expectedState = null;
+  // Deduplicate concurrent calls (e.g. React StrictMode double-mount) for the same callback query.
+  if (pendingOAuthCallback && pendingOAuthCallback.search === rawSearch) {
+    return pendingOAuthCallback.promise;
   }
 
-  if (expectedState && state !== expectedState) {
-    clearQueryParams();
-    return {
-      handled: true,
-      error: 'GitHub OAuth state mismatch. Please try signing in again.',
-    };
-  }
-
-  const cfg = getGitHubConfig();
-  if (!cfg.oauthRelayUrl) {
-    clearQueryParams();
-    return {
-      handled: true,
-      error: 'OAuth relay URL is not configured; cannot exchange GitHub authorization code.',
-    };
-  }
-
-  const redirectUri = `${window.location.origin}${window.location.pathname}`;
-  try {
-    const relayRes = await fetch(`${cfg.oauthRelayUrl}/oauth/exchange`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        code,
-        redirect_uri: redirectUri,
-      }),
-    });
-
-    const tokenPayload = (await relayRes.json()) as {
-      access_token?: string;
-      scope?: string;
-      error?: string;
-      error_description?: string;
+  const run = async (): Promise<OAuthCallbackResult> => {
+    const cleanUrl = `${window.location.pathname}${window.location.hash}`;
+    const clearQueryParams = () => {
+      try {
+        window.history.replaceState(null, '', cleanUrl || '/');
+      } catch {
+        // ignore history errors in test runners
+      }
     };
 
-    if (!relayRes.ok || !tokenPayload.access_token) {
+    if (oauthError) {
+      try {
+        window.sessionStorage.removeItem(OAUTH_STATE_STORAGE_KEY);
+      } catch {
+        // ignore storage errors
+      }
       clearQueryParams();
       return {
         handled: true,
-        error:
-          tokenPayload.error_description ||
-          tokenPayload.error ||
-          `OAuth token exchange failed (${relayRes.status}).`,
+        error: oauthErrorDesc || `GitHub sign-in failed (${oauthError}).`,
       };
     }
 
-    const viewer = await fetchGitHubViewer(tokenPayload.access_token);
-    const parsedScopes = tokenPayload.scope
-      ? tokenPayload.scope.split(/[,\s]+/).filter(Boolean)
-      : viewer.scopes;
+    if (!code) {
+      return { handled: false };
+    }
 
-    const session: GitHubSession = {
-      accessToken: tokenPayload.access_token,
-      username: viewer.login,
-      name: viewer.name,
-      avatarUrl: viewer.avatar_url,
-      authMethod: 'oauth',
-      scopes: parsedScopes,
-      connectedAt: new Date().toISOString(),
-    };
-    await saveGitHubSession(session);
-    clearQueryParams();
-    return { handled: true, session };
-  } catch (err) {
-    clearQueryParams();
-    return {
-      handled: true,
-      error: err instanceof Error ? err.message : String(err),
-    };
+    let expectedState: string | null = null;
+    try {
+      expectedState = window.sessionStorage.getItem(OAUTH_STATE_STORAGE_KEY);
+      window.sessionStorage.removeItem(OAUTH_STATE_STORAGE_KEY);
+    } catch {
+      expectedState = null;
+    }
+
+    if (expectedState && state !== expectedState) {
+      clearQueryParams();
+      return {
+        handled: true,
+        error: 'GitHub OAuth state mismatch. Please try signing in again.',
+      };
+    }
+
+    const cfg = getGitHubConfig();
+    if (!cfg.oauthRelayUrl) {
+      clearQueryParams();
+      return {
+        handled: true,
+        error: 'OAuth relay URL is not configured; cannot exchange GitHub authorization code.',
+      };
+    }
+
+    const redirectUri = `${window.location.origin}${window.location.pathname}`;
+    try {
+      const relayRes = await fetch(`${cfg.oauthRelayUrl}/oauth/exchange`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          code,
+          redirect_uri: redirectUri,
+        }),
+      });
+
+      const tokenPayload = (await relayRes.json()) as {
+        access_token?: string;
+        scope?: string;
+        error?: string;
+        error_description?: string;
+      };
+
+      if (!relayRes.ok || !tokenPayload.access_token) {
+        clearQueryParams();
+        return {
+          handled: true,
+          error:
+            tokenPayload.error_description ||
+            tokenPayload.error ||
+            `OAuth token exchange failed (${relayRes.status}).`,
+        };
+      }
+
+      const viewer = await fetchGitHubViewer(tokenPayload.access_token);
+      const parsedScopes = tokenPayload.scope
+        ? tokenPayload.scope.split(/[,\s]+/).filter(Boolean)
+        : viewer.scopes;
+
+      const session: GitHubSession = {
+        accessToken: tokenPayload.access_token,
+        username: viewer.login,
+        name: viewer.name,
+        avatarUrl: viewer.avatar_url,
+        authMethod: 'oauth',
+        scopes: parsedScopes,
+        connectedAt: new Date().toISOString(),
+      };
+      await saveGitHubSession(session);
+      clearQueryParams();
+      return { handled: true, session };
+    } catch (err) {
+      clearQueryParams();
+      return {
+        handled: true,
+        error: err instanceof Error ? err.message : String(err),
+      };
+    }
+  };
+
+  const promise = run();
+  pendingOAuthCallback = { search: rawSearch, promise };
+  try {
+    return await promise;
+  } finally {
+    if (pendingOAuthCallback?.promise === promise) {
+      pendingOAuthCallback = null;
+    }
   }
 }

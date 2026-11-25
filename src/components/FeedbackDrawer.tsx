@@ -300,13 +300,33 @@ export function FeedbackDrawer({
               <Github className="h-4 w-4 text-indigo-700 mt-0.5 shrink-0" />
               <div className="min-w-0">
                 {githubSession ? (
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="text-sm font-semibold text-[var(--text-primary)]">
-                      Signed in as @{githubSession.username}
-                    </span>
-                    <Badge variant="accent" className="text-[10px] uppercase">
-                      {githubSession.authMethod}
-                    </Badge>
+                  <div className="flex items-center gap-2.5">
+                    {githubSession.avatarUrl && (
+                      <img
+                        src={githubSession.avatarUrl}
+                        alt={`@${githubSession.username}`}
+                        className="h-7 w-7 rounded-full object-cover border border-[var(--border-color)] shrink-0"
+                      />
+                    )}
+                    <div className="flex flex-wrap items-center gap-2 min-w-0">
+                      <span className="text-sm font-semibold text-[var(--text-primary)]">
+                        {githubSession.name
+                          ? `${githubSession.name} (@${githubSession.username})`
+                          : `Signed in as @${githubSession.username}`}
+                      </span>
+                      <Badge variant="accent" className="text-[10px] uppercase">
+                        {githubSession.authMethod}
+                      </Badge>
+                      <a
+                        href={`https://github.com/${githubSession.username}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex items-center gap-1 text-xs text-indigo-700 hover:underline dark:text-indigo-400"
+                      >
+                        Profile
+                        <ExternalLink className="h-3 w-3" />
+                      </a>
+                    </div>
                   </div>
                 ) : (
                   <p className="text-sm font-semibold text-[var(--text-primary)]">
