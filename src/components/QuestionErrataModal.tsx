@@ -5,18 +5,18 @@ import {
   Copy,
   ExternalLink,
   FileWarning,
-  Github,
   MessageSquare,
   Send,
   X,
 } from 'lucide-react';
+import { GitHubIcon } from '@/components/ui/GitHubIcon';
 import { QuestionComments } from '@/components/QuestionComments';
 import {
   buildErrataDiffMarkdown,
   buildFallbackIssueUrl,
   createGitHubIssue,
 } from '@/lib/githubApi';
-import type { GitHubSession } from '@/lib/githubAuth';
+import { isEducatorContributor, type GitHubSession } from '@/lib/githubAuth';
 import { formatAscpBreadcrumb } from '@/lib/utils';
 import type { QuestionOption, QuestionRecord } from '@/types/question';
 import { Badge, Button, Input } from './ui/primitives';
@@ -93,6 +93,8 @@ export function QuestionErrataModal({
     githubSession,
   ]);
 
+  const canContribute = isEducatorContributor(githubSession);
+
   if (!open || !question || !diff) return null;
 
   const fallbackIssueUrl = buildFallbackIssueUrl({
@@ -123,6 +125,10 @@ export function QuestionErrataModal({
   const handleSubmitGitHub = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!githubSession) return;
+    if (!canContribute) {
+      setSubmitError('Community errata submissions are limited to verified educator accounts.');
+      return;
+    }
     if (diff.changedFields.length === 0 && !rationaleNote.trim()) {
       setSubmitError('Please modify at least one field or enter a rationale note before submitting.');
       return;
@@ -435,12 +441,18 @@ export function QuestionErrataModal({
           <div className="border-t border-[var(--border-color)] bg-[var(--bg-primary)] px-6 py-3.5 flex flex-wrap items-center justify-between gap-3">
           <div className="text-xs text-[var(--text-secondary)]">
             {githubSession ? (
-              <span>
-                Submitting as <strong>@{githubSession.username}</strong> (<code className="font-mono">question-errata</code>)
-              </span>
+              canContribute ? (
+                <span>
+                  Submitting as <strong>@{githubSession.username}</strong> (<code className="font-mono">question-errata</code>)
+                </span>
+              ) : (
+                <span>
+                  Signed in as <strong>@{githubSession.username}</strong>. Community errata submissions are limited to verified educator accounts.
+                </span>
+              )
             ) : (
               <span>
-                Not signed in — use pre-filled GitHub Issue link or{' '}
+                Community errata submissions require a verified educator account.{' '}
                 {onOpenFeedbackAuth ? (
                   <button
                     type="button"
@@ -453,7 +465,7 @@ export function QuestionErrataModal({
                     Sign in with GitHub
                   </button>
                 ) : (
-                  'connect GitHub'
+                  'Connect GitHub'
                 )}
                 .
               </span>
@@ -461,18 +473,20 @@ export function QuestionErrataModal({
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
-            <a
-              href={fallbackIssueUrl}
-              target="_blank"
-              rel="noreferrer"
-              className="inline-flex h-8 items-center justify-center gap-1.5 rounded-md border border-[var(--border-color)] bg-[var(--bg-surface)] px-2.5 text-xs font-medium text-[var(--text-primary)] hover:bg-[var(--bg-primary)]"
-            >
-              <Github className="h-3.5 w-3.5" />
-              Open Pre-Filled GitHub Issue
-              <ExternalLink className="h-3 w-3" />
-            </a>
+            {canContribute && (
+              <a
+                href={fallbackIssueUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex h-8 items-center justify-center gap-1.5 rounded-md border border-[var(--border-color)] bg-[var(--bg-surface)] px-2.5 text-xs font-medium text-[var(--text-primary)] hover:bg-[var(--bg-primary)]"
+              >
+                <GitHubIcon className="h-3.5 w-3.5" />
+                Open Pre-Filled GitHub Issue
+                <ExternalLink className="h-3 w-3" />
+              </a>
+            )}
 
-            {githubSession && (
+            {githubSession && canContribute && (
               <Button
                 type="submit"
                 variant="primary"

@@ -19,8 +19,6 @@ describe('QuizBuilderSidebar', () => {
     const onSelectPrebuilt = vi.fn();
     const onOpenMyQuizzes = vi.fn();
     const onCreateNewQuiz = vi.fn();
-    const onOpenLocalStorage = vi.fn();
-    const onOpenFeedback = vi.fn();
 
     render(
       <QuizBuilderSidebar
@@ -40,8 +38,6 @@ describe('QuizBuilderSidebar', () => {
         onSelectPrebuilt={onSelectPrebuilt}
         onOpenMyQuizzes={onOpenMyQuizzes}
         onCreateNewQuiz={onCreateNewQuiz}
-        onOpenLocalStorage={onOpenLocalStorage}
-        onOpenFeedback={onOpenFeedback}
       />,
     );
 
@@ -54,20 +50,14 @@ describe('QuizBuilderSidebar', () => {
       'Pre-Built4',
       'My Quizzes2 (5)',
       'New Quiz',
-      'Local Only',
-      'Feedback',
     ]);
 
     await user.click(screen.getByRole('button', { name: /Pre-Built/i }));
     await user.click(screen.getByRole('button', { name: /My Quizzes/i }));
     await user.click(screen.getByRole('button', { name: /New Quiz/i }));
-    await user.click(screen.getByRole('button', { name: /Local Only/i }));
-    await user.click(screen.getByRole('button', { name: /Feedback/i }));
 
     expect(onSelectPrebuilt).toHaveBeenCalledTimes(1);
     expect(onOpenMyQuizzes).toHaveBeenCalledTimes(1);
     expect(onCreateNewQuiz).toHaveBeenCalledTimes(1);
-    expect(onOpenLocalStorage).toHaveBeenCalledTimes(1);
-    expect(onOpenFeedback).toHaveBeenCalledTimes(1);
   });
 });

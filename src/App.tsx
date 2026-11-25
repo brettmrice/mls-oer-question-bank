@@ -3,6 +3,8 @@ import { useVirtualizer } from '@tanstack/react-virtual';
 import {
   AlertCircle,
   CheckCircle2,
+  ClipboardList,
+  Database,
   Download,
   ListFilter,
   SlidersHorizontal,
@@ -217,6 +219,8 @@ export function App(): React.ReactElement {
   const [semanticError, setSemanticError] = useState<string | null>(null);
 
   const [globalReveal, setGlobalReveal] = useState<boolean>(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(false);
+  const [quizSidebarCollapsed, setQuizSidebarCollapsed] = useState<boolean>(false);
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState<boolean>(false);
   const [mobileQuizBuilderOpen, setMobileQuizBuilderOpen] = useState<boolean>(false);
   const [focusNewQuizCounter, setFocusNewQuizCounter] = useState<number>(0);
@@ -1101,53 +1105,87 @@ export function App(): React.ReactElement {
       ) : (
         <div className="mx-auto flex min-h-0 w-full max-w-[1600px] flex-1 gap-6 px-4 py-6 sm:px-6">
           {/* Desktop Sidebar */}
-          <div className="hidden w-80 shrink-0 lg:flex lg:h-full lg:flex-col lg:gap-4">
-            {manifest ? (
-              <TopicsFilterSummaryCard
-                totalQuestions={manifest.totalQuestions}
-                loadedCount={loadedQuestionCount}
-                selectedCount={showTopicSelectionPrompt ? 0 : displayedSelectedCount}
-                loadTimeMs={avgLoadTimeMs}
-              />
-            ) : (
-              <Skeleton className="h-24 w-full shrink-0" />
-            )}
-            <OverflowBlurScrollArea
-              className="min-h-0 flex-1"
-              scrollClassName="lg:pr-1"
+          <div
+            className={`hidden shrink-0 lg:relative lg:flex lg:h-full lg:flex-col lg:overflow-hidden transition-[width] duration-300 ease-in-out ${
+              sidebarCollapsed ? 'lg:w-12' : 'lg:w-80'
+            }`}
+          >
+            <button
+              type="button"
+              onClick={() => setSidebarCollapsed(false)}
+              aria-label="Expand filters sidebar"
+              title={
+                manifest
+                  ? `Expand filters (${manifest.totalQuestions.toLocaleString()} questions)`
+                  : 'Expand filters'
+              }
+              tabIndex={sidebarCollapsed ? 0 : -1}
+              aria-hidden={!sidebarCollapsed}
+              className={`absolute top-0 left-0 z-10 flex h-12 w-12 items-center justify-center rounded-xl border border-[var(--border-color)] bg-[var(--bg-surface)] text-[var(--text-secondary)] shadow-2xs transition-all duration-300 ease-in-out hover:bg-[var(--bg-secondary)] hover:text-[var(--text-primary)] cursor-pointer ${
+                sidebarCollapsed
+                  ? 'scale-100 opacity-100 pointer-events-auto'
+                  : 'scale-95 opacity-0 pointer-events-none'
+              }`}
+            >
+              <Database className="h-6 w-6" strokeWidth={1.75} aria-hidden="true" />
+            </button>
+
+            <div
+              aria-hidden={sidebarCollapsed}
+              className={`flex h-full w-80 flex-col gap-4 transition-all duration-300 ease-in-out ${
+                sidebarCollapsed
+                  ? '-translate-x-full opacity-0 pointer-events-none'
+                  : 'translate-x-0 opacity-100'
+              }`}
             >
               {manifest ? (
-                <FilterSidebar
-                  manifest={manifest}
-                  filters={filters}
-                  ascpPathFacets={ascpPathFacets}
-                  availableBloomLevels={availableBloomLevels}
-                  markCounts={markCounts}
-                  facetsLoading={facetsLoading}
-                  onEnsureTopicFacets={ensureTopicFacets}
-                  activeSemanticShards={activeSemanticShards}
-                  semanticPrompt={semanticPrompt}
-                  semanticLoading={semanticLoading}
-                  onUpdateFilters={updateFilters}
-                  onResetFilters={resetFilters}
-                  onOpenSemanticModal={() => openSemanticModal()}
-                  onSubmitSemanticPrompt={(prompt) => {
-                    setSemanticPrompt(prompt);
-                    updateFilters({ page: 1 });
-                  }}
-                  onClearSemanticPrompt={() => {
-                    setSemanticPrompt('');
-                    setSemanticResults([]);
-                    setSemanticMeta(null);
-                  }}
+                <TopicsFilterSummaryCard
+                  totalQuestions={manifest.totalQuestions}
+                  loadedCount={loadedQuestionCount}
+                  selectedCount={showTopicSelectionPrompt ? 0 : displayedSelectedCount}
+                  loadTimeMs={avgLoadTimeMs}
+                  onCollapse={() => setSidebarCollapsed(true)}
                 />
               ) : (
-                <div className="space-y-4">
-                  <Skeleton className="h-44 w-full" />
-                  <Skeleton className="h-96 w-full" />
-                </div>
+                <Skeleton className="h-24 w-full shrink-0" />
               )}
-            </OverflowBlurScrollArea>
+              <OverflowBlurScrollArea
+                className="min-h-0 flex-1"
+                scrollClassName="lg:pr-1"
+              >
+                {manifest ? (
+                  <FilterSidebar
+                    manifest={manifest}
+                    filters={filters}
+                    ascpPathFacets={ascpPathFacets}
+                    availableBloomLevels={availableBloomLevels}
+                    markCounts={markCounts}
+                    facetsLoading={facetsLoading}
+                    onEnsureTopicFacets={ensureTopicFacets}
+                    activeSemanticShards={activeSemanticShards}
+                    semanticPrompt={semanticPrompt}
+                    semanticLoading={semanticLoading}
+                    onUpdateFilters={updateFilters}
+                    onResetFilters={resetFilters}
+                    onOpenSemanticModal={() => openSemanticModal()}
+                    onSubmitSemanticPrompt={(prompt) => {
+                      setSemanticPrompt(prompt);
+                      updateFilters({ page: 1 });
+                    }}
+                    onClearSemanticPrompt={() => {
+                      setSemanticPrompt('');
+                      setSemanticResults([]);
+                      setSemanticMeta(null);
+                    }}
+                  />
+                ) : (
+                  <div className="space-y-4">
+                    <Skeleton className="h-44 w-full" />
+                    <Skeleton className="h-96 w-full" />
+                  </div>
+                )}
+              </OverflowBlurScrollArea>
+            </div>
           </div>
 
           {/* Mobile Filter Drawer */}
@@ -1481,24 +1519,50 @@ export function App(): React.ReactElement {
 
           {/* Desktop Right Aside: Quiz Builder */}
           <aside
-            className="hidden w-80 shrink-0 lg:flex lg:h-full lg:flex-col lg:gap-4"
+            className={`hidden shrink-0 lg:relative lg:flex lg:h-full lg:flex-col lg:overflow-hidden transition-[width] duration-300 ease-in-out ${
+              quizSidebarCollapsed ? 'lg:w-12' : 'lg:w-80'
+            }`}
             aria-label="Quiz Builder"
           >
-            <QuizBuilderSidebar
-              manifest={manifest}
-              activeView={activeView}
-              quizCount={quizzes.length}
-              activeQuizQuestionCount={activeQuiz?.questionIds.length ?? 0}
-              backupStatus={backupStatus}
-              onSelectPrebuilt={() => setActiveView('prebuilt')}
-              onOpenMyQuizzes={() => setQuizManagerOpen(true)}
-              onCreateNewQuiz={() => {
-                setQuizManagerOpen(true);
-                setFocusNewQuizCounter((c) => c + 1);
-              }}
-              onOpenLocalStorage={() => setQuizManagerOpen(true)}
-              onOpenFeedback={() => setFeedbackDrawerOpen(true)}
-            />
+            <button
+              type="button"
+              onClick={() => setQuizSidebarCollapsed(false)}
+              aria-label="Expand Quiz Builder sidebar"
+              title="Expand Quiz Builder"
+              tabIndex={quizSidebarCollapsed ? 0 : -1}
+              aria-hidden={!quizSidebarCollapsed}
+              className={`absolute top-0 right-0 z-10 flex h-12 w-12 items-center justify-center rounded-xl border border-[var(--border-color)] bg-[var(--bg-surface)] text-[var(--text-secondary)] shadow-2xs transition-all duration-300 ease-in-out hover:bg-[var(--bg-secondary)] hover:text-[var(--text-primary)] cursor-pointer ${
+                quizSidebarCollapsed
+                  ? 'scale-100 opacity-100 pointer-events-auto'
+                  : 'scale-95 opacity-0 pointer-events-none'
+              }`}
+            >
+              <ClipboardList className="h-6 w-6" strokeWidth={1.75} aria-hidden="true" />
+            </button>
+
+            <div
+              aria-hidden={quizSidebarCollapsed}
+              className={`flex h-full w-80 flex-col gap-4 transition-all duration-300 ease-in-out ${
+                quizSidebarCollapsed
+                  ? 'translate-x-full opacity-0 pointer-events-none'
+                  : 'translate-x-0 opacity-100'
+              }`}
+            >
+              <QuizBuilderSidebar
+                manifest={manifest}
+                activeView={activeView}
+                quizCount={quizzes.length}
+                activeQuizQuestionCount={activeQuiz?.questionIds.length ?? 0}
+                backupStatus={backupStatus}
+                onSelectPrebuilt={() => setActiveView('prebuilt')}
+                onOpenMyQuizzes={() => setQuizManagerOpen(true)}
+                onCreateNewQuiz={() => {
+                  setQuizManagerOpen(true);
+                  setFocusNewQuizCounter((c) => c + 1);
+                }}
+                onCollapse={() => setQuizSidebarCollapsed(true)}
+              />
+            </div>
           </aside>
         </div>
       )}
@@ -1543,14 +1607,6 @@ export function App(): React.ReactElement {
                   setMobileQuizBuilderOpen(false);
                   setQuizManagerOpen(true);
                   setFocusNewQuizCounter((c) => c + 1);
-                }}
-                onOpenLocalStorage={() => {
-                  setMobileQuizBuilderOpen(false);
-                  setQuizManagerOpen(true);
-                }}
-                onOpenFeedback={() => {
-                  setMobileQuizBuilderOpen(false);
-                  setFeedbackDrawerOpen(true);
                 }}
               />
             </div>

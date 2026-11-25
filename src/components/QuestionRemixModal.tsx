@@ -7,20 +7,19 @@ import {
   Copy,
   ExternalLink,
   GitFork,
-  Github,
   HardDrive,
   Plus,
   Send,
   Trash2,
   X,
 } from 'lucide-react';
+import { GitHubIcon } from '@/components/ui/GitHubIcon';
 import type { RemixedQuestionRecord } from '@/lib/db';
 import {
-  buildFallbackIssueUrl,
   buildVariantSubmissionMarkdown,
   createGitHubIssue,
 } from '@/lib/githubApi';
-import type { GitHubSession } from '@/lib/githubAuth';
+import { isEducatorContributor, type GitHubSession } from '@/lib/githubAuth';
 import { saveRemixedQuestion } from '@/lib/remixStore';
 import { formatAscpBreadcrumb } from '@/lib/utils';
 import type { ManifestData, QuestionOption, QuestionRecord } from '@/types/question';
@@ -232,12 +231,6 @@ export function QuestionRemixModal({
     return null;
   }
 
-  const fallbackIssueUrl = buildFallbackIssueUrl({
-    title: submissionSummary.suggestedTitle,
-    body: submissionSummary.markdownBody,
-    labels: ['question-variant', 'community-contribution'],
-  });
-
   const validateDraft = (): string | null => {
     if (!questionText.trim()) {
       return 'Question stem cannot be empty.';
@@ -334,6 +327,11 @@ export function QuestionRemixModal({
     const validationError = validateDraft();
     if (validationError) {
       setErrorMsg(validationError);
+      return;
+    }
+    const canContribute = isEducatorContributor(githubSession);
+    if (!canContribute) {
+      setErrorMsg('Community question submissions are limited to verified educator accounts.');
       return;
     }
     setSubmittingCommunity(true);
@@ -791,16 +789,10 @@ export function QuestionRemixModal({
               <Copy className="h-3.5 w-3.5" />
               {copiedPayload ? 'Copied!' : 'Copy JSON/Markdown'}
             </Button>
-            {!githubSession && (
-              <a
-                href={fallbackIssueUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-[var(--border-color)] bg-[var(--bg-surface)] px-3 text-xs font-medium text-[var(--text-primary)] hover:bg-[var(--bg-primary)]"
-              >
-                Open Pre-filled GitHub Issue
-                <ExternalLink className="h-3.5 w-3.5" />
-              </a>
+            {githubSession && !isEducatorContributor(githubSession) && (
+              <span className="text-xs text-[var(--text-secondary)]">
+                Community submissions require a verified educator email; Save Locally is available for all accounts.
+              </span>
             )}
           </div>
 
@@ -819,19 +811,21 @@ export function QuestionRemixModal({
               {savingLocal ? 'Saving…' : 'Save Locally'}
             </Button>
             {githubSession ? (
-              <Button
-                type="submit"
-                variant="primary"
-                size="sm"
-                disabled={savingLocal || submittingCommunity}
-              >
-                <Send className="h-3.5 w-3.5" />
-                {submittingCommunity ? 'Submitting…' : 'Submit to OER Question Bank'}
-              </Button>
+              isEducatorContributor(githubSession) && (
+                <Button
+                  type="submit"
+                  variant="primary"
+                  size="sm"
+                  disabled={savingLocal || submittingCommunity}
+                >
+                  <Send className="h-3.5 w-3.5" />
+                  {submittingCommunity ? 'Submitting…' : 'Submit to OER Question Bank'}
+                </Button>
+              )
             ) : (
               onOpenFeedbackAuth && (
                 <Button type="button" variant="primary" size="sm" onClick={onOpenFeedbackAuth}>
-                  <Github className="h-3.5 w-3.5" />
+                  <GitHubIcon className="h-3.5 w-3.5" />
                   Sign in to Submit to OER Bank
                 </Button>
               )

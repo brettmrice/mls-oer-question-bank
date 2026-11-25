@@ -38,7 +38,8 @@ const SESSION: GitHubSession = {
   name: 'Reviewer One',
   avatarUrl: null,
   authMethod: 'pat',
-  scopes: ['public_repo', 'gist'],
+  scopes: ['public_repo', 'gist', 'user:email'],
+  verifiedEmails: ['brrice@augusta.edu'],
   connectedAt: '2026-11-21T12:00:00Z',
 };
 
@@ -103,5 +104,25 @@ describe('QuestionErrataModal', () => {
     expect(captured.body).not.toBeNull();
     expect(captured.body?.labels).toEqual(['question-errata']);
     expect(String(captured.body?.body)).toContain('q_errata_ui_01');
+  });
+
+  it('hides GitHub issue submission and pre-filled issue link for non-educator accounts', () => {
+    const nonEducatorSession: GitHubSession = {
+      ...SESSION,
+      verifiedEmails: ['student@gmail.com'],
+    };
+
+    render(
+      <QuestionErrataModal
+        open={true}
+        question={QUESTION}
+        githubSession={nonEducatorSession}
+        onClose={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText(/limited to verified educator accounts/i)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Submit Correction to GitHub/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /Open Pre-Filled GitHub Issue/i })).not.toBeInTheDocument();
   });
 });

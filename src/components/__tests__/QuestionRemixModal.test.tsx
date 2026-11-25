@@ -40,7 +40,8 @@ const SESSION: GitHubSession = {
   name: 'Reviewer One',
   avatarUrl: null,
   authMethod: 'pat',
-  scopes: ['public_repo', 'gist'],
+  scopes: ['public_repo', 'gist', 'user:email'],
+  verifiedEmails: ['brrice@augusta.edu'],
   connectedAt: '2026-11-21T12:00:00Z',
 };
 
@@ -116,5 +117,28 @@ describe('QuestionRemixModal', () => {
     expect(String(captured.body?.body)).toContain('CPDA-1 Storage');
     expect(String(captured.body?.body)).toContain('question-variant-v1');
     expect(screen.getByText(/View Issue #88 on GitHub/i)).toBeInTheDocument();
+  });
+
+  it('allows Save Locally but hides community submission for non-educator accounts', () => {
+    const nonEducatorSession: GitHubSession = {
+      ...SESSION,
+      verifiedEmails: ['user@example.com'],
+    };
+
+    render(
+      <QuestionRemixModal
+        open={true}
+        sourceQuestion={QUESTION}
+        parentQuestionId={QUESTION.id}
+        githubSession={nonEducatorSession}
+        onClose={vi.fn()}
+        onSavedLocal={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByRole('button', { name: /Save Locally/i })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Submit to OER Question Bank/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /Open Pre-filled GitHub Issue/i })).not.toBeInTheDocument();
+    expect(screen.getByText(/Community submissions require a verified educator email/i)).toBeInTheDocument();
   });
 });

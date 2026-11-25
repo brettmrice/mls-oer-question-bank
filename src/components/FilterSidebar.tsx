@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import {
   ChevronDown,
   ChevronRight,
+  ChevronsLeft,
   Database,
   Lock,
   Minus,
@@ -191,6 +192,7 @@ export interface TopicsFilterSummaryCardProps {
   loadedCount: number;
   selectedCount: number;
   loadTimeMs: number;
+  onCollapse?: () => void;
   className?: string;
 }
 
@@ -202,6 +204,7 @@ export function TopicsFilterSummaryCard({
   loadedCount,
   selectedCount,
   loadTimeMs,
+  onCollapse,
   className,
 }: TopicsFilterSummaryCardProps): React.ReactElement {
   const selectedPct =
@@ -224,7 +227,24 @@ export function TopicsFilterSummaryCard({
   }, [loadTimeMs]);
 
   return (
-    <Card className={cn('shrink-0 p-4 flex items-center gap-4', className)}>
+    <Card
+      className={cn(
+        'relative shrink-0 p-4 flex items-center justify-center',
+        onCollapse ? 'gap-2.5' : 'gap-4',
+        className,
+      )}
+    >
+      {onCollapse && (
+        <button
+          type="button"
+          onClick={onCollapse}
+          aria-label="Collapse filters sidebar"
+          title="Collapse filters"
+          className="absolute left-2.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-[var(--text-secondary)] transition-colors hover:bg-[var(--bg-secondary)] hover:text-[var(--text-primary)] cursor-pointer"
+        >
+          <ChevronsLeft className="h-4 w-4" aria-hidden="true" />
+        </button>
+      )}
       <div
         className="shrink-0 flex items-center gap-2 text-[var(--text-secondary)]"
         title="Total questions in bank"
@@ -235,7 +255,7 @@ export function TopicsFilterSummaryCard({
         </span>
       </div>
       <div className="w-px self-stretch shrink-0 bg-[var(--border-color)]" aria-hidden="true" />
-      <div className="min-w-0 flex-1 flex justify-center">
+      <div className="shrink-0">
         <div
           className="grid grid-cols-[auto_auto_auto_auto] items-baseline gap-x-1.5 gap-y-1 text-xs text-[var(--text-secondary)] tabular-nums"
           title="Loaded questions with running median load time (last 2000 ms), and selected questions"

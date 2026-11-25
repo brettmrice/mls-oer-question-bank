@@ -1,9 +1,8 @@
 import React from 'react';
 import {
+  ChevronsRight,
   ClipboardList,
-  HardDrive,
   Layers,
-  MessageSquarePlus,
   Plus,
 } from 'lucide-react';
 import { Badge, Button, Card } from '@/components/ui/primitives';
@@ -19,8 +18,7 @@ export interface QuizBuilderSidebarProps {
   onSelectPrebuilt: () => void;
   onOpenMyQuizzes: () => void;
   onCreateNewQuiz: () => void;
-  onOpenLocalStorage: () => void;
-  onOpenFeedback: () => void;
+  onCollapse?: () => void;
 }
 
 export function QuizBuilderSidebar({
@@ -32,8 +30,7 @@ export function QuizBuilderSidebar({
   onSelectPrebuilt,
   onOpenMyQuizzes,
   onCreateNewQuiz,
-  onOpenLocalStorage,
-  onOpenFeedback,
+  onCollapse,
 }: QuizBuilderSidebarProps): React.ReactElement {
   const prebuiltCount = manifest?.prebuiltCatalog?.count ?? 0;
   const unsyncedCount =
@@ -42,10 +39,26 @@ export function QuizBuilderSidebar({
   return (
     <>
       {/* Top Section: Fixed Quiz Builder Title */}
-      <Card className="shrink-0 p-4 flex items-center justify-center gap-4">
+      <Card className="relative shrink-0 p-4 flex items-center justify-center gap-2.5">
+        <ClipboardList
+          className="h-6 w-6 shrink-0 text-[var(--text-secondary)]"
+          strokeWidth={1.75}
+          aria-hidden="true"
+        />
         <h2 className="text-center text-sm font-semibold uppercase tracking-wide text-[var(--text-primary)]">
           Quiz Builder
         </h2>
+        {onCollapse && (
+          <button
+            type="button"
+            onClick={onCollapse}
+            aria-label="Collapse Quiz Builder sidebar"
+            title="Collapse Quiz Builder"
+            className="absolute right-2.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-[var(--text-secondary)] transition-colors hover:bg-[var(--bg-secondary)] hover:text-[var(--text-primary)] cursor-pointer"
+          >
+            <ChevronsRight className="h-4 w-4" aria-hidden="true" />
+          </button>
+        )}
       </Card>
 
       {/* Middle Section: Primary Actions + Empty Space */}
@@ -108,34 +121,6 @@ export function QuizBuilderSidebar({
           New Quiz
         </Button>
       </div>
-
-      {/* Bottom Section: Local Only + Feedback */}
-      <Card className="shrink-0 p-3">
-        <div className="grid grid-cols-2 gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={onOpenLocalStorage}
-            title="No cloud user database — click to view IndexedDB storage notice and JSON backup options"
-            className="w-full justify-start text-[var(--text-secondary)]"
-          >
-            <HardDrive className="h-3.5 w-3.5 shrink-0 text-[var(--text-secondary)]" />
-            <span className="truncate">
-              {backupStatus?.syncMode === 'gist_synced' ? 'Gist Synced' : 'Local Only'}
-            </span>
-          </Button>
-
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={onOpenFeedback}
-            className="w-full justify-start"
-          >
-            <MessageSquarePlus className="h-3.5 w-3.5 shrink-0 text-[var(--text-secondary)]" />
-            <span className="truncate">Feedback</span>
-          </Button>
-        </div>
-      </Card>
     </>
   );
 }

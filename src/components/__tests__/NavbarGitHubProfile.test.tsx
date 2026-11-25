@@ -4,7 +4,12 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Navbar } from '@/components/Navbar';
 import { db } from '@/lib/db';
-import { completeGitHubOAuthCallback, type GitHubSession } from '@/lib/githubAuth';
+import {
+  completeGitHubOAuthCallback,
+  isEducatorContributor,
+  isEmailAllowed,
+  type GitHubSession,
+} from '@/lib/githubAuth';
 import type { ManifestData } from '@/types/question';
 
 const SAMPLE_SESSION: GitHubSession = {
@@ -133,6 +138,16 @@ describe('completeGitHubOAuthCallback', () => {
           }),
         } as Response;
       }
+      if (target === 'https://api.github.com/user/emails') {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => [
+            { email: 'brrice@augusta.edu', primary: true, verified: true },
+            { email: 'unverified@augusta.edu', primary: false, verified: false },
+          ],
+        } as Response;
+      }
       throw new Error(`Unexpected fetch: ${target}`);
     });
     vi.stubGlobal('fetch', fetchMock);
@@ -144,6 +159,7 @@ describe('completeGitHubOAuthCallback', () => {
 
     expect(r1.handled).toBe(true);
     expect(r1.session?.username).toBe('dr_mls');
+    expect(r1.session?.verifiedEmails).toEqual(['brrice@augusta.edu']);
     expect(r2).toEqual(r1);
     const exchangeCalls = fetchMock.mock.calls.filter((c) =>
       String(c[0]).endsWith('/oauth/exchange'),
@@ -157,5 +173,27 @@ describe('completeGitHubOAuthCallback', () => {
     );
     expect(res.handled).toBe(true);
     expect(res.error).toBe('User cancelled login');
+  });
+});
+
+describe('educator email allowlist helpers', () => {
+  it('supports both exact email addresses and domain entries case-insensitively', () => {
+    expect(isEmailAllowed('BRRICE@augusta.edu', ['brrice@augusta.edu'])).toBe(true);
+    expect(isEmailAllowed('other@augusta.edu', ['brrice@augusta.edu'])).toBe(false);
+    expect(isEmailAllowed('faculty@augusta.edu', ['augusta.edu'])).toBe(true);
+    expect(isEmailAllowed('faculty@augusta.edu', ['@augusta.edu'])).toBe(true);
+    expect(isEmailAllowed('evilaugusta.edu', ['augusta.edu'])).toBe(false);
+  });
+
+  it('checks verifiedEmails on GitHubSession', () => {
+    expect(isEducatorContributor(null, ['brrice@augusta.edu'])).toBe(false);
+    expect(
+      isEducatorContributor({ ...SAMPLE_SESSION, verifiedEmails: [] }, ['brrice@augusta.edu']),
+    ).toBe(false);
+    expect(
+      isEducatorContributor({ ...SAMPLE_SESSION, verifiedEmails: ['brrice@augusta.edu'] }, [
+        'brrice@augusta.edu',
+      ]),
+    ).toBe(true);
   });
 });

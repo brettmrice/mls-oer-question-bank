@@ -8,6 +8,7 @@ export interface GitHubSession {
   avatarUrl: string | null;
   authMethod: 'oauth' | 'pat';
   scopes: string[];
+  verifiedEmails?: string[];
   connectedAt: string;
 }
 
@@ -21,19 +22,57 @@ function generateOAuthState(): string {
   return `st_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
 }
 
+async function fetchVerifiedGitHubEmails(token: string): Promise<string[]> {
+  try {
+    const response = await fetch('https://api.github.com/user/emails', {
+      headers: {
+        Accept: 'application/vnd.github+json',
+        Authorization: `Bearer ${token}`,
+        'X-GitHub-Api-Version': '2022-11-28',
+      },
+    });
+    if (!response.ok) {
+      return [];
+    }
+    const data = (await response.json()) as Array<{
+      email?: unknown;
+      verified?: unknown;
+    }>;
+    if (!Array.isArray(data)) {
+      return [];
+    }
+    const verified = new Set<string>();
+    for (const entry of data) {
+      if (entry?.verified === true && typeof entry.email === 'string') {
+        const normalized = entry.email.trim().toLowerCase();
+        if (normalized.includes('@')) {
+          verified.add(normalized);
+        }
+      }
+    }
+    return Array.from(verified);
+  } catch {
+    return [];
+  }
+}
+
 async function fetchGitHubViewer(token: string): Promise<{
   login: string;
   name: string | null;
   avatar_url: string | null;
   scopes: string[];
+  verifiedEmails: string[];
 }> {
-  const response = await fetch('https://api.github.com/user', {
-    headers: {
-      Accept: 'application/vnd.github+json',
-      Authorization: `Bearer ${token}`,
-      'X-GitHub-Api-Version': '2022-11-28',
-    },
-  });
+  const [response, verifiedEmails] = await Promise.all([
+    fetch('https://api.github.com/user', {
+      headers: {
+        Accept: 'application/vnd.github+json',
+        Authorization: `Bearer ${token}`,
+        'X-GitHub-Api-Version': '2022-11-28',
+      },
+    }),
+    fetchVerifiedGitHubEmails(token),
+  ]);
 
   if (!response.ok) {
     let message = `GitHub authentication failed (${response.status}).`;
@@ -69,7 +108,36 @@ async function fetchGitHubViewer(token: string): Promise<{
     name: data.name ?? null,
     avatar_url: data.avatar_url ?? null,
     scopes,
+    verifiedEmails,
   };
+}
+
+export function isEmailAllowed(email: string, allowlist: string[]): boolean {
+  const normalizedEmail = email.trim().toLowerCase();
+  if (!normalizedEmail.includes('@')) return false;
+
+  for (const rawRule of allowlist) {
+    const rule = rawRule.trim().toLowerCase();
+    if (!rule) continue;
+    if (rule.startsWith('@')) {
+      if (normalizedEmail.endsWith(rule)) return true;
+    } else if (rule.includes('@')) {
+      if (normalizedEmail === rule) return true;
+    } else if (normalizedEmail.endsWith(`@${rule}`)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+export function isEducatorContributor(
+  session: GitHubSession | null | undefined,
+  allowlist: string[] = getGitHubConfig().educatorEmailAllowlist,
+): boolean {
+  if (!session || !Array.isArray(session.verifiedEmails) || session.verifiedEmails.length === 0) {
+    return false;
+  }
+  return session.verifiedEmails.some((email) => isEmailAllowed(email, allowlist));
 }
 
 export async function getGitHubSession(): Promise<GitHubSession | null> {
@@ -88,6 +156,9 @@ export async function getGitHubSession(): Promise<GitHubSession | null> {
     avatarUrl: session.avatarUrl ?? null,
     authMethod: session.authMethod === 'oauth' ? 'oauth' : 'pat',
     scopes: Array.isArray(session.scopes) ? session.scopes : [],
+    verifiedEmails: Array.isArray(session.verifiedEmails)
+      ? session.verifiedEmails.filter((e): e is string => typeof e === 'string')
+      : [],
     connectedAt: session.connectedAt ?? new Date().toISOString(),
   };
 }
@@ -116,6 +187,7 @@ export async function signInWithPersonalToken(rawToken: string): Promise<GitHubS
     avatarUrl: viewer.avatar_url,
     authMethod: 'pat',
     scopes: viewer.scopes,
+    verifiedEmails: viewer.verifiedEmails,
     connectedAt: new Date().toISOString(),
   };
   await saveGitHubSession(session);
@@ -140,7 +212,7 @@ export function buildGitHubAuthorizeUrl(): { url: string; state: string; redirec
   const params = new URLSearchParams({
     client_id: cfg.clientId,
     redirect_uri: redirectUri,
-    scope: 'gist public_repo',
+    scope: 'gist public_repo user:email',
     state,
   });
   return {
@@ -285,6 +357,7 @@ export async function completeGitHubOAuthCallback(
         avatarUrl: viewer.avatar_url,
         authMethod: 'oauth',
         scopes: parsedScopes,
+        verifiedEmails: viewer.verifiedEmails,
         connectedAt: new Date().toISOString(),
       };
       await saveGitHubSession(session);

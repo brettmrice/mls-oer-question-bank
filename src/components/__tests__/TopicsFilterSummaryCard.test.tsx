@@ -1,4 +1,4 @@
-import { act, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { TopicsFilterSummaryCard } from '@/components/FilterSidebar';
 
@@ -58,5 +58,37 @@ describe('TopicsFilterSummaryCard', () => {
       vi.advanceTimersByTime(3000);
     });
     expect(screen.getByText('0 ms')).toHaveClass('opacity-0');
+  });
+
+  it('renders collapse button only when onCollapse is provided and calls it on click', () => {
+    const onCollapse = vi.fn();
+    const { rerender } = render(
+      <TopicsFilterSummaryCard
+        totalQuestions={1000}
+        loadedCount={500}
+        selectedCount={250}
+        loadTimeMs={10}
+      />,
+    );
+
+    expect(
+      screen.queryByRole('button', { name: /collapse filters sidebar/i }),
+    ).not.toBeInTheDocument();
+
+    rerender(
+      <TopicsFilterSummaryCard
+        totalQuestions={1000}
+        loadedCount={500}
+        selectedCount={250}
+        loadTimeMs={10}
+        onCollapse={onCollapse}
+      />,
+    );
+
+    const collapseBtn = screen.getByRole('button', {
+      name: /collapse filters sidebar/i,
+    });
+    fireEvent.click(collapseBtn);
+    expect(onCollapse).toHaveBeenCalledTimes(1);
   });
 });

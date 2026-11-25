@@ -10,7 +10,6 @@ import {
   Download,
   ExternalLink,
   GitBranch,
-  Github,
   GraduationCap,
   HardDrive,
   KeyRound,
@@ -26,6 +25,7 @@ import {
 import { BlueprintBalanceMeter } from '@/components/BlueprintBalanceMeter';
 import { FormattedText } from '@/components/FormattedText';
 import { QuizExportButtons } from '@/components/QuizExportButtons';
+import { GitHubIcon } from '@/components/ui/GitHubIcon';
 import { Badge, Button, Drawer, Input, Separator, Skeleton } from '@/components/ui/primitives';
 import { getGitHubConfig } from '@/config/github';
 import type { QuizWorkspaceRecord } from '@/lib/db';
@@ -441,7 +441,7 @@ export function QuizManagerDrawer({
                 className="h-7 text-xs"
               >
                 <Download className="h-3 w-3" />
-                Download Recovery Snapshot
+                Download JSON Snapshot
               </Button>
             </div>
           </div>
@@ -450,7 +450,7 @@ export function QuizManagerDrawer({
           <div className="pt-2 border-t border-amber-200/70 space-y-2">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div className="flex items-center gap-1.5 text-[11px]">
-                <Github className="h-3.5 w-3.5 text-[var(--text-primary)]" />
+                <GitHubIcon className="h-3.5 w-3.5 text-[var(--text-primary)]" />
                 {githubSession ? (
                   <span>
                     GitHub Gist Sync connected as <strong>@{githubSession.username}</strong>
@@ -512,7 +512,7 @@ export function QuizManagerDrawer({
                         }}
                         className="bg-[var(--bg-surface)] h-7 text-xs"
                       >
-                        <Github className="h-3 w-3" />
+                        <GitHubIcon className="h-3 w-3" />
                         Sign in with GitHub
                       </Button>
                     )}

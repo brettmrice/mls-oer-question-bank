@@ -5,14 +5,27 @@ export interface GitHubConfig {
   giscusRepoId: string | null;
   giscusCategory: string;
   giscusCategoryId: string | null;
+  educatorEmailAllowlist: string[];
   isOAuthConfigured: boolean;
   isGiscusConfigured: boolean;
 }
+
+const DEFAULT_EDUCATOR_ALLOWLIST = ['brrice@augusta.edu'];
 
 function cleanEnv(value: unknown): string | null {
   if (typeof value !== 'string') return null;
   const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed : null;
+}
+
+export function parseEducatorEmailAllowlist(raw: unknown): string[] {
+  const cleaned = cleanEnv(raw);
+  if (!cleaned) return [...DEFAULT_EDUCATOR_ALLOWLIST];
+  const entries = cleaned
+    .split(',')
+    .map((item) => item.trim().toLowerCase())
+    .filter((item) => item.length > 0);
+  return entries.length > 0 ? entries : [...DEFAULT_EDUCATOR_ALLOWLIST];
 }
 
 export function getGitHubConfig(): GitHubConfig {
@@ -24,6 +37,7 @@ export function getGitHubConfig(): GitHubConfig {
   const giscusRepoId = cleanEnv(import.meta.env.VITE_GISCUS_REPO_ID);
   const giscusCategory = cleanEnv(import.meta.env.VITE_GISCUS_CATEGORY) ?? 'Question Discussions';
   const giscusCategoryId = cleanEnv(import.meta.env.VITE_GISCUS_CATEGORY_ID);
+  const educatorEmailAllowlist = parseEducatorEmailAllowlist(import.meta.env.VITE_EDUCATOR_EMAIL_ALLOWLIST);
 
   return {
     repo,
@@ -32,6 +46,7 @@ export function getGitHubConfig(): GitHubConfig {
     giscusRepoId,
     giscusCategory,
     giscusCategoryId,
+    educatorEmailAllowlist,
     isOAuthConfigured: Boolean(clientId && oauthRelayUrl),
     isGiscusConfigured: Boolean(giscusRepoId && giscusCategoryId),
   };

@@ -3,7 +3,6 @@ import {
   AlertCircle,
   CheckCircle2,
   ExternalLink,
-  Github,
   KeyRound,
   LogOut,
   MessageCircle,
@@ -12,6 +11,7 @@ import {
   ShieldCheck,
   ThumbsUp,
 } from 'lucide-react';
+import { GitHubIcon } from '@/components/ui/GitHubIcon';
 import { getGitHubConfig } from '@/config/github';
 import {
   buildFallbackIssueUrl,
@@ -297,7 +297,7 @@ export function FeedbackDrawer({
         <Card className="p-4 border-indigo-200 bg-indigo-50/40 space-y-3">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="flex items-start gap-2.5 min-w-0">
-              <Github className="h-4 w-4 text-indigo-700 mt-0.5 shrink-0" />
+              <GitHubIcon className="h-4 w-4 text-indigo-700 mt-0.5 shrink-0" />
               <div className="min-w-0">
                 {githubSession ? (
                   <div className="flex items-center gap-2.5">
@@ -339,7 +339,7 @@ export function FeedbackDrawer({
                 <p className="text-xs text-[var(--text-secondary)] mt-0.5 flex items-center gap-1">
                   <ShieldCheck className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
                   <span>
-                    Zero OER user database: tokens stay only in your browser IndexedDB; relay exchanges OAuth codes statelessly.
+                    We don&apos;t store your account info on any server — your sign-in stays privately in your browser.
                   </span>
                 </p>
               </div>
@@ -355,7 +355,7 @@ export function FeedbackDrawer({
                 <>
                   {cfg.isOAuthConfigured && (
                     <Button variant="primary" size="sm" onClick={handleOAuthClick}>
-                      <Github className="h-3.5 w-3.5" />
+                      <GitHubIcon className="h-3.5 w-3.5" />
                       Sign in with GitHub
                     </Button>
                   )}
@@ -508,7 +508,7 @@ export function FeedbackDrawer({
                 rel="noreferrer"
                 className="inline-flex h-8 items-center gap-1.5 rounded-md border border-[var(--border-color)] bg-[var(--bg-surface)] px-3 text-xs font-medium text-[var(--text-primary)] hover:bg-[var(--bg-primary)]"
               >
-                <Github className="h-3.5 w-3.5" />
+                <GitHubIcon className="h-3.5 w-3.5" />
                 Open Pre-Filled Issue on GitHub
                 <ExternalLink className="h-3 w-3" />
               </a>

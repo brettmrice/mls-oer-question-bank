@@ -4,7 +4,6 @@ import {
   ChevronDown,
   ClipboardList,
   ExternalLink,
-  Github,
   HelpCircle,
   Loader2,
   LogOut,
@@ -14,6 +13,7 @@ import {
   User,
   X,
 } from 'lucide-react';
+import { GitHubIcon } from '@/components/ui/GitHubIcon';
 import { Badge, Button, Separator } from '@/components/ui/primitives';
 import type { GitHubSession } from '@/lib/githubAuth';
 import type { BackupStatus } from '@/lib/quizStore';
@@ -222,7 +222,7 @@ export function Navbar({
                           />
                         ) : (
                           <div className="flex h-10 w-10 items-center justify-center rounded-full bg-indigo-100 text-indigo-700 dark:bg-indigo-900/60 dark:text-indigo-200 shrink-0">
-                            <Github className="h-5 w-5" />
+                            <GitHubIcon className="h-5 w-5" />
                           </div>
                         )}
                         <div className="min-w-0 flex-1">
@@ -277,7 +277,7 @@ export function Navbar({
                           className="flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-xs font-medium text-[var(--text-primary)] hover:bg-[var(--cream-surface-soft)] transition-colors"
                         >
                           <span className="flex items-center gap-2">
-                            <Github className="h-3.5 w-3.5 text-[var(--text-secondary)]" />
+                            <GitHubIcon className="h-3.5 w-3.5 text-[var(--text-secondary)]" />
                             View GitHub Profile
                           </span>
                           <ExternalLink className="h-3 w-3 text-[var(--text-secondary)]" />
@@ -344,7 +344,7 @@ export function Navbar({
                     </>
                   ) : (
                     <>
-                      <Github className="h-3.5 w-3.5 text-[var(--text-secondary)]" />
+                      <GitHubIcon className="h-3.5 w-3.5 text-[var(--text-secondary)]" />
                       <span>GitHub Login</span>
                     </>
                   )}
