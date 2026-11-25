@@ -19,7 +19,11 @@ import {
   formatParquetSource,
   selectTargetShards,
 } from '@/lib/queryBuilder';
-import { groupVariantItems } from '@/lib/variantGrouping';
+import {
+  buildQuestionRanges,
+  groupVariantItemsWithCounts,
+  type QuestionRange,
+} from '@/lib/variantGrouping';
 import type {
   AscpPathFacet,
   FilterState,
@@ -126,10 +130,16 @@ function mapRowToQuestion(row: Record<string, unknown>): QuestionRecord {
   };
 }
 
-const MAX_VARIANT_INDEX_CACHE_ENTRIES = 12;
-const variantGroupIndexCache = new Map<string, string[]>();
+interface CachedVariantGroupIndex {
+  representativeIds: string[];
+  groupCounts: number[];
+  rawTotal: number;
+}
 
-function getCachedVariantGroupIds(cacheKey: string): string[] | undefined {
+const MAX_VARIANT_INDEX_CACHE_ENTRIES = 12;
+const variantGroupIndexCache = new Map<string, CachedVariantGroupIndex>();
+
+function getCachedVariantGroupIndex(cacheKey: string): CachedVariantGroupIndex | undefined {
   const cached = variantGroupIndexCache.get(cacheKey);
   if (!cached) return undefined;
   variantGroupIndexCache.delete(cacheKey);
@@ -137,7 +147,7 @@ function getCachedVariantGroupIds(cacheKey: string): string[] | undefined {
   return cached;
 }
 
-function setCachedVariantGroupIds(cacheKey: string, ids: string[]): void {
+function setCachedVariantGroupIndex(cacheKey: string, entry: CachedVariantGroupIndex): void {
   if (variantGroupIndexCache.has(cacheKey)) {
     variantGroupIndexCache.delete(cacheKey);
   } else if (variantGroupIndexCache.size >= MAX_VARIANT_INDEX_CACHE_ENTRIES) {
@@ -146,17 +156,31 @@ function setCachedVariantGroupIds(cacheKey: string, ids: string[]): void {
       variantGroupIndexCache.delete(oldestKey);
     }
   }
-  variantGroupIndexCache.set(cacheKey, ids);
+  variantGroupIndexCache.set(cacheKey, entry);
 }
 
 export async function queryQuestions(
   manifest: ManifestData,
   filters: FilterState,
-): Promise<{ total: number; items: QuestionRecord[]; shardsQueried: number; elapsedMs: number }> {
+): Promise<{
+  total: number;
+  rawTotal: number;
+  items: QuestionRecord[];
+  questionRanges: Record<string, QuestionRange>;
+  shardsQueried: number;
+  elapsedMs: number;
+}> {
   const start = performance.now();
   const targetShards = selectTargetShards(manifest, filters);
   if (targetShards.length === 0) {
-    return { total: 0, items: [], shardsQueried: 0, elapsedMs: 0 };
+    return {
+      total: 0,
+      rawTotal: 0,
+      items: [],
+      questionRanges: {},
+      shardsQueried: 0,
+      elapsedMs: 0,
+    };
   }
 
   const { db, conn } = await getDuckDB();
@@ -169,13 +193,13 @@ export async function queryQuestions(
     orderBy: buildOrderByClause(filters.sortBy),
   });
 
-  let representativeIds = getCachedVariantGroupIds(cacheKey);
-  if (!representativeIds) {
+  let cachedIndex = getCachedVariantGroupIndex(cacheKey);
+  if (!cachedIndex) {
     const indexSql = buildVariantIndexQuery(parquetPaths, filters);
     const indexTable = await conn.query(indexSql);
     const indexRows = indexTable.toArray().map((r) => r.toJSON() as Record<string, unknown>);
 
-    const groupedRows = groupVariantItems(
+    const groupedEntries = groupVariantItemsWithCounts(
       indexRows,
       (row) => String(row.id ?? ''),
       (row) => {
@@ -186,15 +210,22 @@ export async function queryQuestions(
         return safeParseJsonArray<string>(raw);
       },
     );
-    representativeIds = groupedRows.map((row) => String(row.id ?? ''));
-    setCachedVariantGroupIds(cacheKey, representativeIds);
+    cachedIndex = {
+      representativeIds: groupedEntries.map((entry) => String(entry.item.id ?? '')),
+      groupCounts: groupedEntries.map((entry) => entry.count),
+      rawTotal: indexRows.length,
+    };
+    setCachedVariantGroupIndex(cacheKey, cachedIndex);
   }
 
+  const { representativeIds, groupCounts, rawTotal } = cachedIndex;
   const total = representativeIds.length;
   if (total === 0) {
     return {
       total: 0,
+      rawTotal,
       items: [],
+      questionRanges: {},
       shardsQueried: targetShards.length,
       elapsedMs: Math.round(performance.now() - start),
     };
@@ -208,11 +239,20 @@ export async function queryQuestions(
   if (pageIds.length === 0) {
     return {
       total,
+      rawTotal,
       items: [],
+      questionRanges: {},
       shardsQueried: targetShards.length,
       elapsedMs: Math.round(performance.now() - start),
     };
   }
+
+  let pageStartPosition = 1;
+  for (let i = 0; i < offset; i += 1) {
+    pageStartPosition += groupCounts[i] ?? 1;
+  }
+  const pageCounts = groupCounts.slice(offset, offset + pageIds.length);
+  const questionRanges = buildQuestionRanges(pageIds, pageCounts, pageStartPosition);
 
   const rowsSql = buildQuestionsByIdsQuery(parquetPaths, pageIds);
   const rowsTable = await conn.query(rowsSql);
@@ -227,7 +267,9 @@ export async function queryQuestions(
 
   return {
     total,
+    rawTotal,
     items,
+    questionRanges,
     shardsQueried: targetShards.length,
     elapsedMs: Math.round(performance.now() - start),
   };

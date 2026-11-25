@@ -84,12 +84,13 @@ export function Card({
   );
 }
 
-export function Input({
-  className,
-  ...props
-}: React.InputHTMLAttributes<HTMLInputElement>): React.ReactElement {
+export const Input = React.forwardRef<
+  HTMLInputElement,
+  React.InputHTMLAttributes<HTMLInputElement>
+>(function Input({ className, ...props }, ref): React.ReactElement {
   return (
     <input
+      ref={ref}
       className={cn(
         'h-9 w-full rounded-lg border border-[var(--border-color)] bg-[var(--bg-surface)] px-3 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-secondary)]/70 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20',
         className,
@@ -97,7 +98,7 @@ export function Input({
       {...props}
     />
   );
-}
+});
 
 export function Separator({ className }: { className?: string }): React.ReactElement {
   return <div className={cn('h-px w-full bg-[var(--border-color)]', className)} />;

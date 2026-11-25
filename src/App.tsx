@@ -1,11 +1,9 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useVirtualizer } from '@tanstack/react-virtual';
 import {
   AlertCircle,
-  ChevronLeft,
-  ChevronRight,
   Download,
   ListFilter,
-  Plus,
   SlidersHorizontal,
   Sparkles,
   X,
@@ -17,12 +15,15 @@ import { PreBuiltQuizzesView } from '@/components/PreBuiltQuizzesView';
 import { QuestionCard } from '@/components/QuestionCard';
 import { QuestionErrataModal } from '@/components/QuestionErrataModal';
 import { QuestionRemixModal } from '@/components/QuestionRemixModal';
+import { QuizBuilderSidebar } from '@/components/QuizBuilderSidebar';
 import { QuizManagerDrawer } from '@/components/QuizManagerDrawer';
 import { SemanticSearchModal } from '@/components/SemanticSearchModal';
 import { StudentPracticeView } from '@/components/StudentPracticeView';
 import { OverflowBlurScrollArea } from '@/components/ui/OverflowBlurScrollArea';
+import { TruncatedTextTooltip } from '@/components/ui/TruncatedTextTooltip';
 import { Button, Card, Skeleton } from '@/components/ui/primitives';
 import { getDataBaseUrl } from '@/config/dataSource';
+import { getGitHubConfig } from '@/config/github';
 import type {
   QuestionRating,
   QuizWorkspaceRecord,
@@ -39,6 +40,8 @@ import { fetchPrebuiltFromGist } from '@/lib/githubApi';
 import {
   completeGitHubOAuthCallback,
   getGitHubSession,
+  signOutGitHub,
+  startGitHubOAuthFlow,
   type GitHubSession,
 } from '@/lib/githubAuth';
 import type { CentroidSuggestion, HybridRankedItem } from '@/lib/hybridRanker';
@@ -64,6 +67,7 @@ import {
 import { deleteRemixedQuestion, listAllRemixes } from '@/lib/remixStore';
 import { runHybridSemanticSearch } from '@/lib/semanticClient';
 import { formatBytes } from '@/lib/utils';
+import type { QuestionRange } from '@/lib/variantGrouping';
 import {
   DEFAULT_FILTERS,
   type AscpPathFacet,
@@ -129,7 +133,9 @@ export function App(): React.ReactElement {
   // Explorer Query State
   const [filters, setFilters] = useState<FilterState>(DEFAULT_FILTERS);
   const [questions, setQuestions] = useState<QuestionRecord[]>([]);
+  const [questionRanges, setQuestionRanges] = useState<Record<string, QuestionRange>>({});
   const [totalCount, setTotalCount] = useState<number>(0);
+  const [rawTotalCount, setRawTotalCount] = useState<number>(0);
   const [avgLoadTimeMs, setAvgLoadTimeMs] = useState<number>(0);
   const loadTimeHistoryRef = useRef<Array<{ ts: number; ms: number }>>([]);
   const loadTimeTimerRef = useRef<number | null>(null);
@@ -173,7 +179,11 @@ export function App(): React.ReactElement {
     };
   }, []);
   const [loading, setLoading] = useState<boolean>(true);
+  const [loadingMore, setLoadingMore] = useState<boolean>(false);
   const [queryError, setQueryError] = useState<string | null>(null);
+  const [semanticVisibleCount, setSemanticVisibleCount] = useState<number>(
+    DEFAULT_FILTERS.pageSize,
+  );
 
   const [ascpPathFacets, setAscpPathFacets] = useState<AscpPathFacet[]>([]);
   const [availableBloomLevels, setAvailableBloomLevels] = useState<string[] | null>(null);
@@ -187,6 +197,10 @@ export function App(): React.ReactElement {
   const [activeSemanticShards, setActiveSemanticShards] = useState<string[]>([]);
   const [semanticPrompt, setSemanticPrompt] = useState<string>('');
   const [semanticResults, setSemanticResults] = useState<HybridRankedItem[]>([]);
+  const [semanticRawTotal, setSemanticRawTotal] = useState<number>(0);
+  const [semanticQuestionRanges, setSemanticQuestionRanges] = useState<
+    Record<string, QuestionRange>
+  >({});
   const [semanticMeta, setSemanticMeta] = useState<{
     embedMs: number;
     searchMs: number;
@@ -198,6 +212,8 @@ export function App(): React.ReactElement {
 
   const [globalReveal, setGlobalReveal] = useState<boolean>(false);
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState<boolean>(false);
+  const [mobileQuizBuilderOpen, setMobileQuizBuilderOpen] = useState<boolean>(false);
+  const [focusNewQuizCounter, setFocusNewQuizCounter] = useState<number>(0);
   const [remixesByParent, setRemixesByParent] = useState<Record<string, RemixedQuestionRecord[]>>({});
   const [remixModalState, setRemixModalState] = useState<{
     sourceQuestion: QuestionRecord;
@@ -399,27 +415,56 @@ export function App(): React.ReactElement {
     if (showTopicSelectionPrompt) {
       querySeqRef.current += 1;
       setQuestions([]);
+      setQuestionRanges({});
       setTotalCount(0);
+      setRawTotalCount(0);
       setLoading(false);
+      setLoadingMore(false);
       setQueryError(null);
       return;
     }
+    const isInitialPage = effectiveFilters.page <= 1;
     const seq = ++querySeqRef.current;
-    setLoading(true);
+    if (isInitialPage) {
+      setLoading(true);
+      setLoadingMore(false);
+      questionListRef.current?.scrollTo({ top: 0 });
+    } else {
+      setLoadingMore(true);
+    }
     setQueryError(null);
 
     queryQuestions(manifest, effectiveFilters)
       .then((res) => {
         if (seq !== querySeqRef.current) return;
-        setQuestions(res.items);
+        if (isInitialPage) {
+          setQuestions(res.items);
+          setQuestionRanges(res.questionRanges);
+        } else {
+          setQuestions((prev) => {
+            const seen = new Set(prev.map((q) => q.id));
+            const next = [...prev];
+            for (const item of res.items) {
+              if (!seen.has(item.id)) {
+                seen.add(item.id);
+                next.push(item);
+              }
+            }
+            return next;
+          });
+          setQuestionRanges((prev) => ({ ...prev, ...res.questionRanges }));
+        }
         setTotalCount(res.total);
+        setRawTotalCount(res.rawTotal);
         recordLoadTime(res.elapsedMs);
         setLoading(false);
+        setLoadingMore(false);
       })
       .catch((err: unknown) => {
         if (seq !== querySeqRef.current) return;
         setQueryError(err instanceof Error ? err.message : String(err));
         setLoading(false);
+        setLoadingMore(false);
       });
   }, [manifest, effectiveFilters, isSemanticActive, activeView, showTopicSelectionPrompt]);
 
@@ -450,6 +495,10 @@ export function App(): React.ReactElement {
       .then((out) => {
         if (seq !== semanticSeqRef.current) return;
         setSemanticResults(out.items);
+        setSemanticVisibleCount(DEFAULT_FILTERS.pageSize);
+        questionListRef.current?.scrollTo({ top: 0 });
+        setSemanticRawTotal(out.rawTotal);
+        setSemanticQuestionRanges(out.questionRanges);
         setSemanticMeta({
           embedMs: out.embedMs,
           searchMs: out.searchMs,
@@ -685,6 +734,9 @@ export function App(): React.ReactElement {
   );
 
   const displayedTotal = isSemanticActive ? semanticResults.length : totalCount;
+  const displayedSelectedCount = isSemanticActive
+    ? Math.max(semanticRawTotal, semanticResults.length)
+    : rawTotalCount;
   const loadedQuestionCount = useMemo(() => {
     if (!manifest || showTopicSelectionPrompt) return 0;
     if (isSemanticActive) {
@@ -700,8 +752,7 @@ export function App(): React.ReactElement {
   }, [manifest, showTopicSelectionPrompt, isSemanticActive, activeSemanticShards, filters]);
   const displayedItems = useMemo(() => {
     if (isSemanticActive) {
-      const start = (filters.page - 1) * filters.pageSize;
-      return semanticResults.slice(start, start + filters.pageSize).map((item) => ({
+      return semanticResults.slice(0, semanticVisibleCount).map((item) => ({
         question: item.question,
         semanticMatch: {
           semanticScore: item.semanticScore,
@@ -713,7 +764,7 @@ export function App(): React.ReactElement {
       question,
       semanticMatch: undefined,
     }));
-  }, [isSemanticActive, semanticResults, questions, filters.page, filters.pageSize]);
+  }, [isSemanticActive, semanticResults, semanticVisibleCount, questions]);
 
   useEffect(() => {
     if (showTopicSelectionPrompt || displayedItems.length === 0) {
@@ -808,25 +859,47 @@ export function App(): React.ReactElement {
     };
   }, [displayedItems]);
 
-  const handleAddPageToQuiz = async () => {
-    const pageIds = displayedItems.map((item) => item.question.id);
-    if (pageIds.length === 0) return;
-    if (activeQuiz) {
-      const res = await addQuestionsToQuiz(activeQuiz.id, pageIds);
-      await refreshWorkspace(activeQuiz.id);
-      showNotice(`Added ${res.addedCount} new question(s) to "${activeQuiz.name}".`);
-    } else {
-      const created = await createQuiz('My Quiz 1', '', {
-        questionIds: pageIds,
-        activate: true,
-      });
-      await refreshWorkspace(created.id);
-      showNotice(`Created "${created.name}" with ${pageIds.length} questions.`);
-    }
-  };
-
   const isBusy = isSemanticActive ? semanticLoading : loading;
-  const totalPages = Math.max(1, Math.ceil(displayedTotal / filters.pageSize));
+  const hasMore = isSemanticActive
+    ? semanticVisibleCount < semanticResults.length
+    : questions.length < totalCount;
+
+  const rowVirtualizer = useVirtualizer({
+    count: displayedItems.length,
+    getScrollElement: () => questionListRef.current,
+    estimateSize: () => 340,
+    overscan: 4,
+    gap: 16,
+  });
+
+  const virtualItems = rowVirtualizer.getVirtualItems();
+  const lastVirtualIndex =
+    virtualItems.length > 0 ? virtualItems[virtualItems.length - 1].index : -1;
+
+  useEffect(() => {
+    if (showTopicSelectionPrompt || activeView !== 'explore') return;
+    if (!hasMore || isBusy || loadingMore) return;
+    if (lastVirtualIndex < 0 || lastVirtualIndex < displayedItems.length - 5) return;
+
+    if (isSemanticActive) {
+      setSemanticVisibleCount((prev) =>
+        Math.min(semanticResults.length, prev + DEFAULT_FILTERS.pageSize),
+      );
+      return;
+    }
+
+    setFilters((prev) => ({ ...prev, page: prev.page + 1 }));
+  }, [
+    showTopicSelectionPrompt,
+    activeView,
+    hasMore,
+    isBusy,
+    loadingMore,
+    lastVirtualIndex,
+    displayedItems.length,
+    isSemanticActive,
+    semanticResults.length,
+  ]);
 
   if (manifestError) {
     return (
@@ -845,6 +918,29 @@ export function App(): React.ReactElement {
           onOpenSemanticModal={() => {}}
           onOpenQuizManager={() => setQuizManagerOpen(true)}
           onOpenFeedback={() => setFeedbackDrawerOpen(true)}
+          onGitHubLogin={() => {
+            if (githubSession) {
+              setFeedbackDrawerOpen(true);
+              return;
+            }
+            if (getGitHubConfig().isOAuthConfigured) {
+              try {
+                startGitHubOAuthFlow();
+              } catch (err: unknown) {
+                showNotice(
+                  err instanceof Error ? err.message : 'Unable to start GitHub OAuth flow.',
+                );
+                setFeedbackDrawerOpen(true);
+              }
+            } else {
+              setFeedbackDrawerOpen(true);
+            }
+          }}
+          onGitHubLogout={() => {
+            void signOutGitHub();
+            setGithubSession(null);
+            showNotice('Signed out of GitHub.');
+          }}
           onNotice={showNotice}
         />
         <main className="mx-auto max-w-2xl px-4 py-16">
@@ -905,6 +1001,30 @@ export function App(): React.ReactElement {
         onOpenSemanticModal={() => openSemanticModal()}
         onOpenQuizManager={() => setQuizManagerOpen(true)}
         onOpenFeedback={() => setFeedbackDrawerOpen(true)}
+        onGitHubLogin={() => {
+          if (githubSession) {
+            setQuizManagerOpen(true);
+            return;
+          }
+          if (getGitHubConfig().isOAuthConfigured) {
+            try {
+              startGitHubOAuthFlow();
+            } catch (err: unknown) {
+              showNotice(
+                err instanceof Error ? err.message : 'Unable to start GitHub OAuth flow.',
+              );
+              setFeedbackDrawerOpen(true);
+            }
+          } else {
+            setFeedbackDrawerOpen(true);
+          }
+        }}
+        onGitHubLogout={() => {
+          void signOutGitHub();
+          setGithubSession(null);
+          showNotice('Signed out of GitHub.');
+        }}
+        onOpenMobileQuizBuilder={() => setMobileQuizBuilderOpen(true)}
         onNotice={showNotice}
       />
 
@@ -942,7 +1062,7 @@ export function App(): React.ReactElement {
               <TopicsFilterSummaryCard
                 totalQuestions={manifest.totalQuestions}
                 loadedCount={loadedQuestionCount}
-                selectedCount={showTopicSelectionPrompt ? 0 : displayedTotal}
+                selectedCount={showTopicSelectionPrompt ? 0 : displayedSelectedCount}
                 loadTimeMs={avgLoadTimeMs}
               />
             ) : (
@@ -1009,7 +1129,7 @@ export function App(): React.ReactElement {
                     <TopicsFilterSummaryCard
                       totalQuestions={manifest.totalQuestions}
                       loadedCount={loadedQuestionCount}
-                      selectedCount={showTopicSelectionPrompt ? 0 : displayedTotal}
+                      selectedCount={showTopicSelectionPrompt ? 0 : displayedSelectedCount}
                       loadTimeMs={avgLoadTimeMs}
                     />
                   </div>
@@ -1049,66 +1169,6 @@ export function App(): React.ReactElement {
 
           {/* Main Content Area */}
           <main className="flex min-h-0 min-w-0 flex-1 flex-col gap-4">
-            {/* Toolbar */}
-            <Card className="shrink-0 p-3.5 sm:p-4">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div className="flex flex-wrap items-center gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="lg:hidden"
-                    onClick={() => setMobileFiltersOpen(true)}
-                  >
-                    <SlidersHorizontal className="h-3.5 w-3.5" />
-                    Filters
-                  </Button>
-                </div>
-
-                <div className="flex flex-wrap items-center gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={isBusy || showTopicSelectionPrompt || displayedItems.length === 0}
-                    onClick={handleAddPageToQuiz}
-                  >
-                    <Plus className="h-3.5 w-3.5" />
-                    Add Page ({showTopicSelectionPrompt ? 0 : displayedItems.length})
-                  </Button>
-
-                  {!isSemanticActive && (
-                    <select
-                      aria-label="Sort questions"
-                      value={filters.sortBy}
-                      onChange={(e) =>
-                        updateFilters({ sortBy: e.target.value as SortOption, page: 1 })
-                      }
-                      className="h-8 rounded-md border border-[var(--border-color)] bg-[var(--bg-surface)] px-2.5 text-xs font-medium text-[var(--text-primary)]"
-                    >
-                      <option value="difficulty_asc">Sort: Difficulty (1 → 10)</option>
-                      <option value="difficulty_desc">Sort: Difficulty (10 → 1)</option>
-                      <option value="bloom_asc">Sort: Bloom (RE → AN)</option>
-                      <option value="bloom_desc">Sort: Bloom (AN → RE)</option>
-                      <option value="topic_asc">Sort: ASCP Topic (A → Z)</option>
-                      <option value="topic_desc">Sort: ASCP Topic (Z → A)</option>
-                    </select>
-                  )}
-
-                  <select
-                    aria-label="Questions per page"
-                    value={filters.pageSize}
-                    onChange={(e) =>
-                      updateFilters({ pageSize: Number(e.target.value), page: 1 })
-                    }
-                    className="h-8 rounded-md border border-[var(--border-color)] bg-[var(--bg-surface)] px-2 text-xs font-medium text-[var(--text-primary)]"
-                  >
-                    <option value={25}>25 / page</option>
-                    <option value={50}>50 / page</option>
-                    <option value={100}>100 / page</option>
-                  </select>
-                </div>
-              </div>
-            </Card>
-
             {/* Active Semantic Search + Stage 2 Centroid Suggestions */}
             {isSemanticActive && (
               <Card className="shrink-0 border-indigo-200 bg-indigo-50/50 p-4 space-y-3">
@@ -1248,91 +1308,209 @@ export function App(): React.ReactElement {
                   isBusy ? 'opacity-55 pointer-events-none' : 'opacity-100'
                 }`}
                 scrollClassName="pr-1"
-                contentClassName="space-y-4"
                 fadeClassName="h-16"
               >
-                {displayedItems.map(({ question, semanticMatch }) => (
-                  <div
-                    key={question.id}
-                    className="animate-card-enter"
-                    ref={(el) => {
-                      if (el) {
-                        questionCardRefs.current.set(question.id, el);
-                      } else {
-                        questionCardRefs.current.delete(question.id);
-                      }
-                    }}
-                  >
-                    <QuestionCard
-                      question={question}
-                      manifest={manifest}
-                      globalReveal={globalReveal}
-                      onToggleGlobalReveal={() => setGlobalReveal((prev) => !prev)}
-                      semanticMatch={semanticMatch}
-                      quizzes={quizzes}
-                      activeQuizId={activeQuiz?.id ?? null}
-                      mark={savedMarksById.get(question.id) ?? null}
-                      getMark={(id) => savedMarksById.get(id) ?? null}
-                      isFocused={
-                        focusedQuestionId ? focusedQuestionId === question.id : undefined
-                      }
-                      onAddToQuiz={handleAddToQuiz}
-                      onRemoveFromQuiz={handleRemoveFromQuiz}
-                      onQuickCreateAndAdd={handleQuickCreateAndAdd}
-                      onUpdateMark={handleUpdateMark}
-                      onSuggestCorrection={setErrataQuestion}
-                      localRemixes={remixesByParent[question.id] ?? []}
-                      onOpenRemix={(sourceQuestion, parentQuestionId, editingRemix) =>
-                        setRemixModalState({ sourceQuestion, parentQuestionId, editingRemix })
-                      }
-                      onDeleteRemix={async (remixId) => {
-                        await deleteRemixedQuestion(remixId);
-                        await refreshWorkspace();
-                        showNotice('Removed local question remix.');
-                      }}
-                      onDeferredAction={showNotice}
-                    />
-                  </div>
-                ))}
+                <div
+                  style={{
+                    height: `${rowVirtualizer.getTotalSize()}px`,
+                    width: '100%',
+                    position: 'relative',
+                  }}
+                >
+                  {virtualItems.map((virtualRow) => {
+                    const { question, semanticMatch } = displayedItems[virtualRow.index];
+                    return (
+                      <div
+                        key={question.id}
+                        data-index={virtualRow.index}
+                        ref={(el) => {
+                          rowVirtualizer.measureElement(el);
+                          if (el) {
+                            questionCardRefs.current.set(question.id, el);
+                          } else {
+                            questionCardRefs.current.delete(question.id);
+                          }
+                        }}
+                        style={{
+                          position: 'absolute',
+                          top: 0,
+                          left: 0,
+                          width: '100%',
+                          transform: `translateY(${virtualRow.start}px)`,
+                        }}
+                      >
+                        <QuestionCard
+                          question={question}
+                          manifest={manifest}
+                          globalReveal={globalReveal}
+                          onToggleGlobalReveal={() => setGlobalReveal((prev) => !prev)}
+                          semanticMatch={semanticMatch}
+                          quizzes={quizzes}
+                          activeQuizId={activeQuiz?.id ?? null}
+                          mark={savedMarksById.get(question.id) ?? null}
+                          getMark={(id) => savedMarksById.get(id) ?? null}
+                          isFocused={
+                            focusedQuestionId ? focusedQuestionId === question.id : undefined
+                          }
+                          onAddToQuiz={handleAddToQuiz}
+                          onRemoveFromQuiz={handleRemoveFromQuiz}
+                          onQuickCreateAndAdd={handleQuickCreateAndAdd}
+                          onUpdateMark={handleUpdateMark}
+                          onSuggestCorrection={setErrataQuestion}
+                          localRemixes={remixesByParent[question.id] ?? []}
+                          onOpenRemix={(sourceQuestion, parentQuestionId, editingRemix) =>
+                            setRemixModalState({ sourceQuestion, parentQuestionId, editingRemix })
+                          }
+                          onDeleteRemix={async (remixId) => {
+                            await deleteRemixedQuestion(remixId);
+                            await refreshWorkspace();
+                            showNotice('Removed local question remix.');
+                          }}
+                          onDeferredAction={showNotice}
+                        />
+                      </div>
+                    );
+                  })}
+                </div>
               </OverflowBlurScrollArea>
             )}
 
-            {/* Pagination */}
-            {!showTopicSelectionPrompt && displayedTotal > 0 && (
+            {/* Question Position Status */}
+            {!showTopicSelectionPrompt && displayedTotal > 0 && (() => {
+              const activeQuestionRanges = isSemanticActive
+                ? semanticQuestionRanges
+                : questionRanges;
+              const focusedItemId =
+                (focusedQuestionId &&
+                displayedItems.some((item) => item.question.id === focusedQuestionId)
+                  ? focusedQuestionId
+                  : displayedItems[0]?.question.id) ?? null;
+              const focusedQuestionRange = focusedItemId
+                ? activeQuestionRanges[focusedItemId]
+                : undefined;
+              const displayedQuestionTotal = isSemanticActive
+                ? Math.max(semanticRawTotal, semanticResults.length)
+                : Math.max(rawTotalCount, totalCount);
+              const questionPositionLabel = focusedQuestionRange
+                ? focusedQuestionRange.end > focusedQuestionRange.start
+                  ? `${focusedQuestionRange.start.toLocaleString()}–${focusedQuestionRange.end.toLocaleString()}`
+                  : focusedQuestionRange.start.toLocaleString()
+                : '1';
+
+              return (
               <Card className="shrink-0 flex flex-wrap items-center justify-between gap-3 px-4 py-3">
                 <span className="text-xs text-[var(--text-secondary)]">
-                  Page <strong className="text-[var(--text-primary)]">{filters.page}</strong> of{' '}
-                  <strong className="text-[var(--text-primary)]">{totalPages.toLocaleString()}</strong>
+                  Question{' '}
+                  <strong className="text-[var(--text-primary)]">{questionPositionLabel}</strong> of{' '}
+                  <strong className="text-[var(--text-primary)]">
+                    {displayedQuestionTotal.toLocaleString()}
+                  </strong>
                 </span>
-                <div className="flex items-center gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={filters.page <= 1 || isBusy}
-                    onClick={() => {
-                      updateFilters({ page: Math.max(1, filters.page - 1) });
-                      questionListRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
-                    }}
-                  >
-                    <ChevronLeft className="h-4 w-4" />
-                    Previous
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={filters.page >= totalPages || isBusy}
-                    onClick={() => {
-                      updateFilters({ page: Math.min(totalPages, filters.page + 1) });
-                      questionListRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
-                    }}
-                  >
-                    Next
-                    <ChevronRight className="h-4 w-4" />
-                  </Button>
+                <div className="flex flex-wrap items-center gap-2">
+                  {loadingMore && (
+                    <span className="text-xs text-[var(--text-secondary)]">
+                      Loading more…
+                    </span>
+                  )}
+                  {!isSemanticActive && (
+                    <select
+                      aria-label="Sort questions"
+                      value={filters.sortBy}
+                      onChange={(e) =>
+                        updateFilters({ sortBy: e.target.value as SortOption, page: 1 })
+                      }
+                      className="h-8 rounded-md border border-[var(--border-color)] bg-[var(--bg-surface)] px-2.5 text-xs font-medium text-[var(--text-primary)]"
+                    >
+                      <option value="difficulty_asc">Sort: Difficulty (1 → 10)</option>
+                      <option value="difficulty_desc">Sort: Difficulty (10 → 1)</option>
+                      <option value="bloom_asc">Sort: Bloom (RE → AN)</option>
+                      <option value="bloom_desc">Sort: Bloom (AN → RE)</option>
+                      <option value="topic_asc">Sort: ASCP Topic (A → Z)</option>
+                      <option value="topic_desc">Sort: ASCP Topic (Z → A)</option>
+                    </select>
+                  )}
                 </div>
               </Card>
-            )}
+              );
+            })()}
           </main>
+
+          {/* Desktop Right Aside: Quiz Builder */}
+          <aside
+            className="hidden w-80 shrink-0 lg:flex lg:h-full lg:flex-col lg:gap-4"
+            aria-label="Quiz Builder"
+          >
+            <QuizBuilderSidebar
+              manifest={manifest}
+              activeView={activeView}
+              quizCount={quizzes.length}
+              activeQuizQuestionCount={activeQuiz?.questionIds.length ?? 0}
+              backupStatus={backupStatus}
+              onSelectPrebuilt={() => setActiveView('prebuilt')}
+              onOpenMyQuizzes={() => setQuizManagerOpen(true)}
+              onCreateNewQuiz={() => {
+                setQuizManagerOpen(true);
+                setFocusNewQuizCounter((c) => c + 1);
+              }}
+              onOpenLocalStorage={() => setQuizManagerOpen(true)}
+              onOpenFeedback={() => setFeedbackDrawerOpen(true)}
+            />
+          </aside>
+        </div>
+      )}
+
+      {/* Mobile Quiz Builder Drawer */}
+      {mobileQuizBuilderOpen && (
+        <div className="fixed inset-0 z-40 flex justify-end lg:hidden">
+          <div
+            className="fixed inset-0 bg-slate-900/40"
+            onClick={() => setMobileQuizBuilderOpen(false)}
+          />
+          <div className="relative z-10 flex h-full w-80 max-w-[85vw] flex-col bg-[var(--bg-primary)] shadow-xl">
+            <div className="flex shrink-0 items-center justify-between px-4 pt-4 pb-3">
+              <span className="text-sm font-semibold text-[var(--text-primary)]">
+                Quiz Builder
+              </span>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setMobileQuizBuilderOpen(false)}
+                aria-label="Close Quiz Builder"
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+            <div className="flex min-h-0 flex-1 flex-col gap-4 px-4 pb-4">
+              <QuizBuilderSidebar
+                manifest={manifest}
+                activeView={activeView}
+                quizCount={quizzes.length}
+                activeQuizQuestionCount={activeQuiz?.questionIds.length ?? 0}
+                backupStatus={backupStatus}
+                onSelectPrebuilt={() => {
+                  setMobileQuizBuilderOpen(false);
+                  setActiveView('prebuilt');
+                }}
+                onOpenMyQuizzes={() => {
+                  setMobileQuizBuilderOpen(false);
+                  setQuizManagerOpen(true);
+                }}
+                onCreateNewQuiz={() => {
+                  setMobileQuizBuilderOpen(false);
+                  setQuizManagerOpen(true);
+                  setFocusNewQuizCounter((c) => c + 1);
+                }}
+                onOpenLocalStorage={() => {
+                  setMobileQuizBuilderOpen(false);
+                  setQuizManagerOpen(true);
+                }}
+                onOpenFeedback={() => {
+                  setMobileQuizBuilderOpen(false);
+                  setFeedbackDrawerOpen(true);
+                }}
+              />
+            </div>
+          </div>
         </div>
       )}
 
@@ -1362,6 +1540,7 @@ export function App(): React.ReactElement {
           />
           <QuizManagerDrawer
             open={quizManagerOpen}
+            focusNewQuizRequest={focusNewQuizCounter}
             manifest={manifest}
             quizzes={quizzes}
             activeQuizId={activeQuiz?.id ?? null}
@@ -1418,6 +1597,8 @@ export function App(): React.ReactElement {
           showNotice(`Saved locally & submitted Variant Issue #${issueNumber} (${issueUrl}).`);
         }}
       />
+
+      <TruncatedTextTooltip />
     </div>
   );
 }

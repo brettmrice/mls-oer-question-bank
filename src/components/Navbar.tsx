@@ -2,10 +2,9 @@ import React, { useEffect, useState } from 'react';
 import {
   BookOpen,
   ClipboardList,
-  HardDrive,
+  Github,
   HelpCircle,
-  Layers,
-  MessageSquarePlus,
+  LogOut,
   Moon,
   Sun,
   X,
@@ -28,24 +27,25 @@ export interface NavbarProps {
   onOpenSemanticModal: () => void;
   onOpenQuizManager: () => void;
   onOpenFeedback: () => void;
+  onGitHubLogin?: () => void;
+  onGitHubLogout?: () => void;
+  onOpenMobileQuizBuilder?: () => void;
   onNotice?: (message: string) => void;
 }
 
 export function Navbar({
   manifest,
   activeView,
-  quizCount,
-  activeQuizQuestionCount,
   backupStatus,
   githubUsername = null,
   theme = 'light',
   onToggleTheme,
   onSelectView,
-  onOpenQuizManager,
-  onOpenFeedback,
+  onGitHubLogin,
+  onGitHubLogout,
+  onOpenMobileQuizBuilder,
 }: NavbarProps): React.ReactElement {
   const [aboutOpen, setAboutOpen] = useState(false);
-  const prebuiltCount = manifest?.prebuiltCatalog?.count ?? 0;
   const unsyncedCount =
     (backupStatus?.unsyncedQuizCount ?? 0) + (backupStatus?.unsyncedBookmarkCount ?? 0);
 
@@ -104,62 +104,23 @@ export function Navbar({
             <BookOpen className="h-3.5 w-3.5" />
             Explore Bank
           </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={!manifest}
-            onClick={() => onSelectView('prebuilt')}
-            className={
-              activeView === 'prebuilt'
-                ? 'bg-[var(--cream-surface)] text-[var(--cream-text)] border-[var(--cream-border)] hover:bg-[var(--cream-surface-hover)] font-semibold'
-                : ''
-            }
-          >
-            <Layers className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
-            Pre-Built Quizzes
-            {prebuiltCount > 0 && (
-              <Badge variant="accent" className="ml-0.5 text-[10px] px-1.5 py-0">
-                {prebuiltCount}
-              </Badge>
-            )}
-          </Button>
-          <Button variant="outline" size="sm" onClick={onOpenQuizManager}>
-            <ClipboardList className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" />
-            My Quizzes
-            {quizCount > 0 && (
-              <Badge variant="accent" className="ml-0.5 text-[10px] px-1.5 py-0">
-                {quizCount} ({activeQuizQuestionCount})
-              </Badge>
-            )}
-            {unsyncedCount > 0 && (
-              <span
-                title={`${unsyncedCount} unsaved change(s) since last backup`}
-                className="ml-0.5 h-2 w-2 rounded-full bg-amber-500"
-              />
-            )}
-          </Button>
-          <button
-            type="button"
-            onClick={onOpenQuizManager}
-            title="No cloud user database — click to view IndexedDB storage notice and JSON backup options"
-            className="hidden xl:inline-flex items-center gap-1 rounded-md border border-[var(--border-color)] bg-[var(--bg-primary)] px-2 py-1 text-[11px] text-[var(--text-secondary)] hover:bg-[var(--cream-surface-soft)] cursor-pointer transition-colors"
-          >
-            <HardDrive className="h-3 w-3 text-[var(--text-secondary)]" />
-            {backupStatus?.syncMode === 'gist_synced' ? 'Gist Synced' : 'Local Only'}
-          </button>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={onOpenFeedback}
-          >
-            <MessageSquarePlus className="h-3.5 w-3.5" />
-            <span>Feedback</span>
-            {githubUsername && (
-              <Badge variant="accent" className="ml-0.5 text-[10px] px-1.5 py-0">
-                @{githubUsername}
-              </Badge>
-            )}
-          </Button>
+          {onOpenMobileQuizBuilder && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={onOpenMobileQuizBuilder}
+              className="lg:hidden"
+            >
+              <ClipboardList className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" />
+              Quiz Builder
+              {unsyncedCount > 0 && (
+                <span
+                  title={`${unsyncedCount} unsaved change(s) since last backup`}
+                  className="ml-0.5 h-2 w-2 rounded-full bg-amber-500"
+                />
+              )}
+            </Button>
+          )}
           {onToggleTheme && (
             <Button
               variant="outline"
@@ -174,6 +135,25 @@ export function Navbar({
                 <Moon className="h-4 w-4 text-[#363945]" />
               )}
             </Button>
+          )}
+          {onGitHubLogin && (
+            <div className="flex items-center gap-1.5">
+              <Button variant="outline" size="sm" onClick={onGitHubLogin}>
+                <Github className="h-3.5 w-3.5 text-[var(--text-secondary)]" />
+                <span>{githubUsername ? `@${githubUsername}` : 'Github Login'}</span>
+              </Button>
+              {githubUsername && onGitHubLogout && (
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={onGitHubLogout}
+                  title="Sign out of GitHub"
+                  aria-label="Sign out of GitHub"
+                >
+                  <LogOut className="h-3.5 w-3.5 text-[var(--text-secondary)]" />
+                </Button>
+              )}
+            </div>
           )}
         </nav>
       </div>

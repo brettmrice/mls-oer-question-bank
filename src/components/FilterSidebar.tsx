@@ -206,6 +206,22 @@ export function TopicsFilterSummaryCard({
 }: TopicsFilterSummaryCardProps): React.ReactElement {
   const selectedPct =
     loadedCount > 0 ? Math.round((selectedCount / loadedCount) * 100) : 0;
+  const [loadTimeVisible, setLoadTimeVisible] = useState(true);
+
+  useEffect(() => {
+    if (loadTimeMs > 0) {
+      setLoadTimeVisible(true);
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      setLoadTimeVisible(false);
+    }, 3000);
+
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [loadTimeMs]);
 
   return (
     <Card className={cn('shrink-0 p-4 flex items-center gap-4', className)}>
@@ -229,7 +245,14 @@ export function TopicsFilterSummaryCard({
             {loadedCount.toLocaleString()}
           </span>
           <span aria-hidden="true">|</span>
-          <span className="whitespace-nowrap">
+          <span
+            className={cn(
+              'whitespace-nowrap',
+              loadTimeVisible
+                ? 'opacity-100 transition-none'
+                : 'opacity-0 transition-opacity duration-500',
+            )}
+          >
             {loadTimeMs} ms
           </span>
 
@@ -790,7 +813,13 @@ export function FilterSidebar({
                     </button>
                   </div>
                   <div className="flex items-center gap-1 shrink-0">
-                    <Badge className="text-[10px] px-1.5 py-0">
+                    <Badge
+                      className={cn(
+                        'text-[10px] px-1.5 py-0 tabular-nums transition-colors',
+                        isDiscChecked &&
+                          'border-[#e5d3ba] bg-[#EFE1CE] text-[#363945] dark:border-[var(--cream-border)] dark:bg-[#363945] dark:text-[#EFE1CE]',
+                      )}
+                    >
                       {disc.count.toLocaleString()}
                     </Badge>
                     <button

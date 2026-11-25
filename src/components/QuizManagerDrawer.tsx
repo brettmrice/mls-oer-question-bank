@@ -66,6 +66,7 @@ import type { ManifestData, QuestionRecord } from '@/types/question';
 
 export interface QuizManagerDrawerProps {
   open: boolean;
+  focusNewQuizRequest?: number;
   manifest: ManifestData;
   quizzes: QuizWorkspaceRecord[];
   activeQuizId: string | null;
@@ -84,6 +85,7 @@ type ManagerTab = 'questions' | 'blueprint' | 'export' | 'share';
 
 export function QuizManagerDrawer({
   open,
+  focusNewQuizRequest = 0,
   manifest,
   quizzes,
   activeQuizId,
@@ -99,6 +101,15 @@ export function QuizManagerDrawer({
 }: QuizManagerDrawerProps): React.ReactElement {
   const [activeTab, setActiveTab] = useState<ManagerTab>('questions');
   const [newQuizName, setNewQuizName] = useState('');
+  const newQuizInputRef = useRef<HTMLInputElement | null>(null);
+
+  useEffect(() => {
+    if (!open || focusNewQuizRequest <= 0) return;
+    const timer = window.setTimeout(() => {
+      newQuizInputRef.current?.focus();
+    }, 50);
+    return () => window.clearTimeout(timer);
+  }, [open, focusNewQuizRequest]);
   const [editingName, setEditingName] = useState(false);
   const [renameDraft, setRenameDraft] = useState('');
   const [descDraft, setDescDraft] = useState('');
@@ -551,6 +562,7 @@ export function QuizManagerDrawer({
         <div className="rounded-xl border border-[var(--border-color)] bg-[var(--bg-surface)] p-4 space-y-3">
           <form onSubmit={handleCreateQuiz} className="flex flex-wrap gap-2">
             <Input
+              ref={newQuizInputRef}
               aria-label="New quiz name"
               value={newQuizName}
               onChange={(e) => setNewQuizName(e.target.value)}
