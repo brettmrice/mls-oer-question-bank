@@ -310,10 +310,13 @@ export function FeedbackDrawer({
                     )}
                     <div className="flex flex-wrap items-center gap-2 min-w-0">
                       <span className="text-sm font-semibold text-[var(--text-primary)]">
-                        {githubSession.name
-                          ? `${githubSession.name} (@${githubSession.username})`
-                          : `Signed in as @${githubSession.username}`}
+                        Signed in as @{githubSession.username}
                       </span>
+                      {githubSession.name && (
+                        <span className="text-xs text-[var(--text-secondary)]">
+                          ({githubSession.name})
+                        </span>
+                      )}
                       <Badge variant="accent" className="text-[10px] uppercase">
                         {githubSession.authMethod}
                       </Badge>

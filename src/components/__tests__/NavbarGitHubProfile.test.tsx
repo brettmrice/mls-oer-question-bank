@@ -103,11 +103,14 @@ describe('completeGitHubOAuthCallback', () => {
   });
 
   afterEach(() => {
+    vi.unstubAllEnvs();
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
   });
 
   it('deduplicates concurrent OAuth callback exchanges for the same code', async () => {
+    vi.stubEnv('VITE_GITHUB_CLIENT_ID', 'test_client_id');
+    vi.stubEnv('VITE_OAUTH_RELAY_URL', 'https://relay.example.com');
     window.sessionStorage.setItem('mls_oer_github_oauth_state', 'state_123');
     const fetchMock = vi.fn(async (url: RequestInfo | URL) => {
       const target = String(url);
