@@ -404,8 +404,7 @@ def run_etl(
     centroids_path.write_bytes(centroid_mat.tobytes())
     c_bytes, c_sha = sha256_file(centroids_path)
 
-    records_by_id = {r.id: r for r in records}
-    prebuilt_quizzes = _build_prebuilt_quizzes(parse_res.subset_memberships, records_by_id)
+    prebuilt_quizzes: list[dict[str, Any]] = []
     prebuilt_path = output_dir / "prebuilt_quizzes.json"
     prebuilt_path.write_text(json.dumps(prebuilt_quizzes, indent=2), encoding="utf-8")
     pb_bytes, pb_sha = sha256_file(prebuilt_path)

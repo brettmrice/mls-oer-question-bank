@@ -156,21 +156,6 @@ export function Navbar({
               )}
             </Button>
           )}
-          {onToggleTheme && (
-            <Button
-              variant="outline"
-              size="icon"
-              onClick={onToggleTheme}
-              aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
-              title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
-            >
-              {theme === 'dark' ? (
-                <Sun className="h-4 w-4 text-[#EFE1CE]" />
-              ) : (
-                <Moon className="h-4 w-4 text-[#363945]" />
-              )}
-            </Button>
-          )}
           {onGitHubLogin && (
             <div className="relative flex items-center gap-1.5" ref={profileMenuRef}>
               {effectiveUsername ? (
@@ -351,6 +336,21 @@ export function Navbar({
                 </Button>
               )}
             </div>
+          )}
+          {onToggleTheme && (
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={onToggleTheme}
+              aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+              title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+            >
+              {theme === 'dark' ? (
+                <Sun className="h-4 w-4 text-[#EFE1CE]" />
+              ) : (
+                <Moon className="h-4 w-4 text-[#363945]" />
+              )}
+            </Button>
           )}
         </nav>
       </div>

@@ -369,12 +369,10 @@ def test_build_shards_sample_and_int8_recall(tmp_path: Path) -> None:
     centroid_norms = np.linalg.norm(centroids, axis=1)
     assert np.allclose(centroid_norms, 1.0, atol=1e-4)
 
-    # Verify prebuilt_quizzes.json references only valid UIDs in built shards
+    # Verify prebuilt_quizzes.json is an empty catalog by default
     prebuilt = json.loads((out_dir / "prebuilt_quizzes.json").read_text(encoding="utf-8"))
-    assert len(prebuilt) > 0
-    for qz in prebuilt:
-        assert len(qz["questionIds"]) == qz["questionCount"] > 0
-        assert all(qid in all_ids for qid in qz["questionIds"])
+    assert prebuilt == []
+    assert manifest["prebuiltCatalog"]["count"] == 0
 
     # Verify similar_ids reference valid UIDs with cosine > 0.90 (using dequantized vectors ~0.90 tolerance)
     checked_siblings = 0

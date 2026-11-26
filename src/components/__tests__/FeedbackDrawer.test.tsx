@@ -103,7 +103,9 @@ describe('FeedbackDrawer', () => {
     );
 
     // Connect with PAT
-    await user.click(screen.getByRole('button', { name: /Connect with GitHub PAT/i }));
+    await user.click(
+      screen.getByRole('button', { name: /Use Token \(PAT\)|Connect with GitHub PAT/i }),
+    );
     await user.type(screen.getByLabelText(/GitHub Personal Access Token/i), 'ghp_abc_123');
     await user.click(screen.getByRole('button', { name: /Connect Token/i }));
 

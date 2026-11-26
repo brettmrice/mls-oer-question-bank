@@ -1188,20 +1188,27 @@ export function App(): React.ReactElement {
             </div>
           </div>
 
-          {/* Mobile Filter Drawer */}
+          {/* Mobile Filter Modal */}
           {mobileFiltersOpen && manifest && (
-            <div className="fixed inset-0 z-40 flex lg:hidden">
+            <div
+              className="fixed inset-0 z-40 flex items-center justify-center p-4 lg:hidden"
+              role="dialog"
+              aria-modal="true"
+              aria-label="Filters"
+            >
               <div
-                className="fixed inset-0 bg-slate-900/40"
+                className="fixed inset-0 bg-slate-900/50 backdrop-blur-[1px]"
                 onClick={() => setMobileFiltersOpen(false)}
+                aria-hidden="true"
               />
-              <div className="relative z-10 flex h-full w-80 max-w-[85vw] flex-col bg-[var(--bg-primary)] shadow-xl">
+              <div className="relative z-10 flex max-h-[90vh] w-full max-w-md flex-col overflow-hidden rounded-2xl border border-[var(--border-color)] bg-[var(--bg-primary)] shadow-2xl">
                 <div className="flex shrink-0 items-center justify-between px-4 pt-4 pb-3">
                   <span className="text-sm font-semibold text-[var(--text-primary)]">Filters</span>
                   <Button
                     variant="ghost"
                     size="icon"
                     onClick={() => setMobileFiltersOpen(false)}
+                    aria-label="Close Filters"
                   >
                     <X className="h-4 w-4" />
                   </Button>
@@ -1567,14 +1574,20 @@ export function App(): React.ReactElement {
         </div>
       )}
 
-      {/* Mobile Quiz Builder Drawer */}
+      {/* Mobile Quiz Builder Modal */}
       {mobileQuizBuilderOpen && (
-        <div className="fixed inset-0 z-40 flex justify-end lg:hidden">
+        <div
+          className="fixed inset-0 z-40 flex items-center justify-center p-4 lg:hidden"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Quiz Builder"
+        >
           <div
-            className="fixed inset-0 bg-slate-900/40"
+            className="fixed inset-0 bg-slate-900/50 backdrop-blur-[1px]"
             onClick={() => setMobileQuizBuilderOpen(false)}
+            aria-hidden="true"
           />
-          <div className="relative z-10 flex h-full w-80 max-w-[85vw] flex-col bg-[var(--bg-primary)] shadow-xl">
+          <div className="relative z-10 flex max-h-[90vh] w-full max-w-md flex-col overflow-hidden rounded-2xl border border-[var(--border-color)] bg-[var(--bg-primary)] shadow-2xl">
             <div className="flex shrink-0 items-center justify-between px-4 pt-4 pb-3">
               <span className="text-sm font-semibold text-[var(--text-primary)]">
                 Quiz Builder
@@ -1588,7 +1601,7 @@ export function App(): React.ReactElement {
                 <X className="h-4 w-4" />
               </Button>
             </div>
-            <div className="flex min-h-0 flex-1 flex-col gap-4 px-4 pb-4">
+            <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-4 pb-4">
               <QuizBuilderSidebar
                 manifest={manifest}
                 activeView={activeView}

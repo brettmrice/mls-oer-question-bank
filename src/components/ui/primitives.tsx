@@ -137,24 +137,29 @@ export function Drawer({
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex justify-end" role="dialog" aria-modal="true" aria-label={title}>
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      role="dialog"
+      aria-modal="true"
+      aria-label={title}
+    >
       <div
-        className="fixed inset-0 bg-slate-900/40 backdrop-blur-[1px]"
+        className="fixed inset-0 bg-slate-900/50 backdrop-blur-[1px]"
         onClick={onClose}
         aria-hidden="true"
       />
       <div
         className={cn(
-          'relative z-10 flex h-full w-full flex-col bg-[var(--bg-surface)] shadow-2xl border-l border-[var(--border-color)]',
+          'relative z-10 flex max-h-[90vh] w-full flex-col overflow-hidden rounded-2xl border border-[var(--border-color)] bg-[var(--bg-surface)] shadow-2xl',
           maxWidthClass,
         )}
       >
-        <div className="flex items-start justify-between gap-4 border-b border-[var(--border-color)] px-6 py-4">
+        <div className="flex shrink-0 items-start justify-between gap-4 border-b border-[var(--border-color)] px-6 py-4">
           <div className="min-w-0">
             <h2 className="text-base font-semibold text-[var(--text-primary)] truncate">{title}</h2>
             {subtitle && <p className="mt-0.5 text-xs text-[var(--text-secondary)] truncate">{subtitle}</p>}
           </div>
-          <Button variant="ghost" size="icon" onClick={onClose} aria-label="Close drawer">
+          <Button variant="ghost" size="icon" onClick={onClose} aria-label="Close modal">
             <X className="h-4 w-4" />
           </Button>
         </div>
